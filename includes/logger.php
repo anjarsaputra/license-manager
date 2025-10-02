@@ -73,19 +73,16 @@ class ALM_Logger {
         return sprintf('[%s] %s - %s', $time, $user, $message);
     }
 
-    private function get_client_ip() {
-        $ip = '';
-        
-        if (isset($_SERVER['HTTP_CF_CONNECTING_IP'])) {
-            $ip = $_SERVER['HTTP_CF_CONNECTING_IP'];
-        } elseif (isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-            $ip = trim(current(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])));
-        } elseif (isset($_SERVER['REMOTE_ADDR'])) {
-            $ip = $_SERVER['REMOTE_ADDR'];
-        }
-
-        return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : 'unknown';
+   private function get_client_ip() {
+    // Use existing alm_sanitize_ip() function
+    if (function_exists('alm_sanitize_ip')) {
+        return alm_sanitize_ip();
     }
+    
+    // Fallback
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : 'unknown';
+}
 
   public function get_system_info() {
         // Dapatkan waktu server dalam WIB

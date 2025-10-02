@@ -146,23 +146,15 @@ class ALM_Security {
     }
 
     private function get_client_ip() {
-        $ip = '';
-        
-        // Check for CloudFlare IP
-        if (isset($_SERVER['HTTP_CF_CONNECTING_IP'])) {
-            $ip = $_SERVER['HTTP_CF_CONNECTING_IP'];
-        }
-        // Check for proxy forwarded IP
-        elseif (isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-            $ip = trim(current(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])));
-        }
-        // Standard remote address
-        elseif (isset($_SERVER['REMOTE_ADDR'])) {
-            $ip = $_SERVER['REMOTE_ADDR'];
-        }
-
-        return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : 'unknown';
+    // Use existing alm_sanitize_ip() function
+    if (function_exists('alm_sanitize_ip')) {
+        return alm_sanitize_ip();
     }
+    
+    // Fallback
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : 'unknown';
+}
     
     
     public function get_security_status() {
