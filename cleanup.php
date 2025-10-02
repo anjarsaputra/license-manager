@@ -1,5 +1,7 @@
 <?php
 // File: cleanup.php
+// Version: 9.1 - Security Enhanced
+// Last Updated: 2025-10-02
 
 if (!defined('ABSPATH')) {
     exit;
@@ -42,6 +44,9 @@ function alm_cleanup_old_logs() {
     // Update cleanup message with results
     $cleanup_message .= sprintf(' %d records deleted.', $deleted);
     
+    // SECURITY FIX: Sanitize IP address before inserting to database
+    $safe_ip = alm_sanitize_ip();
+    
     // Insert cleanup log
     $wpdb->insert(
         $wpdb->prefix . 'alm_logs',
@@ -50,7 +55,7 @@ function alm_cleanup_old_logs() {
             'action'      => 'cleanup',
             'message'     => $cleanup_message,
             'site_url'    => get_site_url(),
-            'ip_address'  => $_SERVER['REMOTE_ADDR'],
+            'ip_address'  => $safe_ip, // FIXED: Now using sanitized IP
             'log_time'    => $utc_time
         ),
         array('%s', '%s', '%s', '%s', '%s', '%s')
@@ -124,17 +129,24 @@ function alm_add_cleanup_settings($settings_array) {
 }
 add_filter('alm_settings', 'alm_add_cleanup_settings');
 
-// Add manual cleanup action
+// Add manual cleanup action - SECURITY: WITH NONCE VERIFICATION
 function alm_manual_cleanup() {
+    // SECURITY: Check user capability
     if (!current_user_can('manage_options')) {
-        wp_die('Unauthorized');
+        wp_die('Unauthorized access');
     }
     
+    // SECURITY: Verify nonce
     if (isset($_POST['alm_manual_cleanup']) && 
+        isset($_POST['_wpnonce']) &&
         wp_verify_nonce($_POST['_wpnonce'], 'alm_manual_cleanup')) {
+        
         alm_cleanup_old_logs();
+        
         wp_redirect(add_query_arg('cleanup', 'success', wp_get_referer()));
         exit;
+    } else {
+        wp_die('Security check failed');
     }
 }
 add_action('admin_post_alm_manual_cleanup', 'alm_manual_cleanup');
@@ -142,7 +154,7 @@ add_action('admin_post_alm_manual_cleanup', 'alm_manual_cleanup');
 // Add cleanup button to activity log page
 function alm_add_cleanup_button() {
     ?>
-    <form method="post" action="<?php echo admin_url('admin-post.php'); ?>" style="display: inline;">
+    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="display: inline;">
         <input type="hidden" name="action" value="alm_manual_cleanup">
         <?php wp_nonce_field('alm_manual_cleanup'); ?>
         <button type="submit" name="alm_manual_cleanup" class="button" 
@@ -228,16 +240,15 @@ function alm_add_cleanup_styles() {
 }
 add_action('admin_head', 'alm_add_cleanup_styles');
 
-
-// Handler untuk export logs
+// Handler untuk export logs - SECURITY: WITH NONCE VERIFICATION
 function handle_alm_export_logs() {
     try {
-        // Verify nonce
+        // SECURITY: Verify nonce
         if (!isset($_GET['_wpnonce']) || !wp_verify_nonce($_GET['_wpnonce'], 'alm_export_logs')) {
-            wp_die('Invalid nonce');
+            wp_die('Invalid nonce - Security check failed');
         }
 
-        // Check permissions
+        // SECURITY: Check permissions
         if (!current_user_can('manage_options')) {
             wp_die('Unauthorized access');
         }
@@ -303,7 +314,8 @@ function handle_alm_export_logs() {
         exit();
 
     } catch (Exception $e) {
-        wp_die('Error exporting logs: ' . $e->getMessage());
+        alm_error_log('Export logs error: ' . $e->getMessage());
+        wp_die('Error exporting logs: ' . esc_html($e->getMessage()));
     }
 }
 
