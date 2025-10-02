@@ -30,7 +30,7 @@ function alm_insert_log($license_key, $action, $message, $site_url = '') {
             'action' => $action,
             'message' => sprintf('[%s] %s - %s', $current_time_utc, $current_user, $message),
             'site_url' => $site_url,
-            'ip_address' => $_SERVER['REMOTE_ADDR'],
+            'ip_address' => alm_sanitize_ip(),
             'log_time' => $current_time_utc
         ),
         array('%s', '%s', '%s', '%s', '%s', '%s')
@@ -702,5 +702,6 @@ add_action('wp_ajax_alm_deactivate_license', 'handle_deactivate_license');
 add_action('wp_ajax_nopriv_alm_deactivate_license', 'handle_deactivate_license');
 add_action('wp_ajax_alm_verify_license', 'handle_verify_license');
 add_action('wp_ajax_nopriv_alm_verify_license', 'handle_verify_license');
+
 
 
