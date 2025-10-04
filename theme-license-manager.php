@@ -21,12 +21,19 @@ require_once plugin_dir_path(__FILE__) . 'includes/license-generator.php';
 add_action('plugins_loaded', function() {
     if (class_exists('WooCommerce')) {
         require_once plugin_dir_path(__FILE__) . 'includes/integrasi-woocommerce.php';
+        require_once plugin_dir_path(__FILE__) . 'includes/woocommerce-customer-portal/class-wc-license-tab.php';
+    require_once plugin_dir_path(__FILE__) . 'includes/woocommerce-customer-portal/tab-ajax.php';
+        require_once plugin_dir_path(__FILE__) . 'includes/woocommerce-customer-portal/rest-api-deactivate.php';
+
     }
 });
 // Di bagian atas setelah plugin header
 require_once plugin_dir_path(__FILE__) . 'includes/security.php';
 // Safe require files
-require_once plugin_dir_path(__FILE__) . 'dashboard.php';
+// Load admin dashboard (ONLY in admin area)
+if (is_admin()) {
+    require_once plugin_dir_path(__FILE__) . 'dashboard.php';
+}
 
 function alm_create_tables_on_activation() {
     global $wpdb;
@@ -1952,4 +1959,7 @@ function alm_render_settings_page() {
     <?php
 }
 ?>
+
+
+
 
