@@ -10,6 +10,212 @@ if ( ! defined('ABSPATH') ) {
     exit;
 }
 
+
+//require_once plugin_dir_path(__FILE__) . 'includes/woocommerce-customer-portal/inc/custom-myaccount/init.php';
+
+/**
+ * DEBUG: Check Activation Table Structure
+ * Visit: /?check_activation_table=1
+ */
+add_action('init', function() {
+    if (!isset($_GET['check_activation_table']) || !current_user_can('manage_options')) {
+        return;
+    }
+    
+    global $wpdb;
+    $table = $wpdb->prefix . 'alm_license_activations';
+    
+    echo '<pre style="background:#000;color:#0f0;padding:20px;font-family:monospace;">';
+    echo "=== ACTIVATION TABLE STRUCTURE ===\n\n";
+    
+    // Check if table exists
+    if ($wpdb->get_var("SHOW TABLES LIKE '{$table}'") != $table) {
+        echo "❌ Table NOT FOUND: {$table}\n";
+        echo '</pre>';
+        exit;
+    }
+    
+    echo "✓ Table: {$table}\n\n";
+    
+    // Show columns
+    $columns = $wpdb->get_results("DESCRIBE {$table}");
+    
+    echo "Columns:\n";
+    foreach ($columns as $col) {
+        echo "  - {$col->Field} ({$col->Type})\n";
+    }
+    
+    echo "\n";
+    
+    // Show sample data
+    echo "Sample Activation Data:\n";
+    $sample = $wpdb->get_row("SELECT * FROM {$table} LIMIT 1");
+    
+    if ($sample) {
+        foreach ($sample as $key => $value) {
+            echo "  {$key}: {$value}\n";
+        }
+    } else {
+        echo "  No data found\n";
+    }
+    
+    // Count total
+    $total = $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
+    echo "\nTotal activations: {$total}\n";
+    
+    echo '</pre>';
+    exit;
+});
+
+
+/**
+ * Custom Functions - Load Customer Portal
+ */
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+
+/**
+ * DEBUG: Show ALM Table Structure
+ * Visit: /?check_alm_table=1
+ */
+add_action('init', function() {
+    if (!isset($_GET['check_alm_table']) || !current_user_can('manage_options')) {
+        return;
+    }
+    
+    global $wpdb;
+    $table = $wpdb->prefix . 'alm_licenses';
+    
+    echo '<pre style="background:#000;color:#0f0;padding:20px;font-family:monospace;">';
+    echo "=== ALM LICENSE TABLE STRUCTURE ===\n\n";
+    
+    // Show columns
+    $columns = $wpdb->get_results("DESCRIBE {$table}");
+    
+    echo "Table: {$table}\n\n";
+    echo "Columns:\n";
+    foreach ($columns as $col) {
+        echo "  - {$col->Field} ({$col->Type})\n";
+    }
+    
+    echo "\n";
+    
+    // Show sample data
+    echo "Sample License Data:\n";
+    $sample = $wpdb->get_row("SELECT * FROM {$table} LIMIT 1");
+    
+    if ($sample) {
+        foreach ($sample as $key => $value) {
+            echo "  {$key}: {$value}\n";
+        }
+    } else {
+        echo "  No data found\n";
+    }
+    
+    // Count total
+    $total = $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
+    echo "\nTotal licenses: {$total}\n";
+    
+    echo '</pre>';
+    exit;
+});
+
+// Define ALL constants yang dibutuhkan
+define('WCP_VERSION', '2.0.0');
+define('WCP_PLUGIN_DIR', plugin_dir_path(__FILE__) . 'includes/woocommerce-customer-portal/');
+define('WCP_PLUGIN_URL', plugin_dir_url(__FILE__) . 'includes/woocommerce-customer-portal/');
+define('WCP_BASE_DIR', WCP_PLUGIN_DIR);
+define('WCP_INC_DIR', WCP_PLUGIN_DIR . 'inc/');
+define('WCP_ASSETS_URL', WCP_PLUGIN_URL . 'assets/');
+define('WCP_TEMPLATES_DIR', WCP_PLUGIN_DIR . 'templates/');
+
+/**
+ * Load all portal files
+ */
+function load_customer_portal_files() {
+    
+    // Check if files exist before requiring
+    $files = [
+        'class-portal-helpers.php',
+        'class-portal-assets.php',
+        'class-portal-navigation.php',
+        'class-portal-init.php',
+        'class-portal-dashboard.php',
+        'class-portal-orders.php',
+        'class-portal-downloads.php',
+    ];
+    
+    foreach ($files as $file) {
+        $file_path = WCP_INC_DIR . $file;
+        if (file_exists($file_path)) {
+            require_once $file_path;
+        } else {
+            error_log('WCP: Missing file - ' . $file);
+        }
+    }
+    
+    // Initialize (only if classes exist)
+    if (class_exists('WCP_Portal_Init')) {
+        WCP_Portal_Init::instance();
+    }
+    
+    if (class_exists('WCP_Portal_Assets')) {
+        WCP_Portal_Assets::instance();
+    }
+    
+    if (class_exists('WCP_Portal_Navigation')) {
+        WCP_Portal_Navigation::instance();
+    }
+    
+    if (class_exists('WCP_Portal_Dashboard')) {
+        WCP_Portal_Dashboard::instance();
+    }
+    
+    
+    
+    if (class_exists('WCP_Portal_Orders')) {
+        WCP_Portal_Orders::instance();
+    }
+    
+    if (class_exists('WCP_Portal_Downloads')) {
+        WCP_Portal_Downloads::instance();
+    }
+}
+add_action('plugins_loaded', 'load_customer_portal_files', 20);
+
+/**
+ * Register endpoint
+ */
+function register_licenses_endpoint() {
+    add_rewrite_endpoint('my-licenses', EP_ROOT | EP_PAGES);
+}
+add_action('init', 'register_licenses_endpoint');
+
+/**
+ * Debug - Check loaded classes
+ */
+add_action('wp_footer', function() {
+    if (!current_user_can('manage_options')) return;
+    
+    echo '<div style="position:fixed;bottom:10px;right:10px;background:#1e293b;color:#10b981;padding:15px;z-index:99999;font-family:monospace;font-size:11px;max-width:350px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);">';
+    echo '<strong style="color:#60a5fa;">🔍 WCP DEBUG:</strong><br>';
+    echo 'Version: ' . (defined('WCP_VERSION') ? '<span style="color:#10b981;">✓ ' . WCP_VERSION . '</span>' : '<span style="color:#ef4444;">✗</span>') . '<br>';
+    echo 'Plugin Dir: ' . (defined('WCP_PLUGIN_DIR') && is_dir(WCP_PLUGIN_DIR) ? '<span style="color:#10b981;">✓</span>' : '<span style="color:#ef4444;">✗</span>') . '<br>';
+    echo 'Templates Dir: ' . (defined('WCP_TEMPLATES_DIR') && is_dir(WCP_TEMPLATES_DIR) ? '<span style="color:#10b981;">✓</span>' : '<span style="color:#ef4444;">✗</span>') . '<br>';
+    echo '<hr style="border:1px solid #334155;margin:8px 0;">';
+    echo 'Helpers: ' . (class_exists('WCP_Portal_Helpers') ? '<span style="color:#10b981;">✓</span>' : '<span style="color:#ef4444;">✗</span>') . '<br>';
+    echo 'Dashboard: ' . (class_exists('WCP_Portal_Dashboard') ? '<span style="color:#10b981;">✓</span>' : '<span style="color:#ef4444;">✗</span>') . '<br>';
+    echo '<hr style="border:1px solid #334155;margin:8px 0;">';
+    
+    global $wp_filter;
+    $dashboard_hooks = isset($wp_filter['woocommerce_account_dashboard']) ? count($wp_filter['woocommerce_account_dashboard']->callbacks) : 0;
+    echo 'Dashboard Hooks: <span style="color:#fbbf24;">' . $dashboard_hooks . '</span><br>';
+    
+    echo '</div>';
+});
 /**
  * =====================================================
  * SECURITY HELPER FUNCTIONS - NEW!

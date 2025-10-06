@@ -57,47 +57,101 @@ class ALM_Security {
             );
         }
 
-        // Validate API key
+        // Get API key from header
         $sent_secret = $request->get_header('X-Alm-Secret');
-        $valid_keys = get_option('alm_secret_keys', []);
-
-        if (empty($valid_keys) || !is_array($valid_keys) || empty($sent_secret)) {
-            $this->log_failed_attempt($ip, $user_agent);
+        
+        if (empty($sent_secret)) {
+            $this->log_failed_attempt($ip, $user_agent, 'Missing API key');
             return new WP_Error(
                 'rest_forbidden',
-                'Invalid authentication credentials',
+                'Missing API key',
                 ['status' => 401]
             );
         }
 
-        // Secure key comparison
-        $authenticated = false;
-        foreach ($valid_keys as $valid_key) {
-            if (hash_equals($valid_key, $sent_secret)) {
-                $authenticated = true;
-                break;
-            }
-        }
-
-        if (!$authenticated) {
-            $this->log_failed_attempt($ip, $user_agent);
+        // ✅ Verify key from database (not options)
+        $key_data = $this->verify_api_key($sent_secret);
+        
+        if (!$key_data) {
+            $this->log_failed_attempt($ip, $user_agent, 'Invalid API key');
             return new WP_Error(
                 'rest_forbidden',
-                'Authentication failed',
+                'Invalid API key',
                 ['status' => 401]
             );
         }
+        
+        // ✅ Check if key is active
+        if ($key_data->status !== 'active') {
+            $this->log_auth_event(
+                'auth_failed', 
+                $ip, 
+                $user_agent, 
+                'failed', 
+                'API key disabled (ID: ' . $key_data->id . ', Label: ' . $key_data->label . ')'
+            );
+            return new WP_Error(
+                'rest_forbidden', 
+                'API key has been disabled', 
+                ['status' => 401]
+            );
+        }
+
+        // ✅ Update last used & increment counter
+        $this->update_key_usage($key_data->id);
 
         // Success - reset failed attempts
         $this->reset_failed_attempts($ip);
-        $this->log_auth_event('auth_success', $ip, $user_agent, 'success', 'Authentication successful');
+        $this->log_auth_event(
+            'auth_success', 
+            $ip, 
+            $user_agent, 
+            'success', 
+            'Authenticated with key ID: ' . $key_data->id . ' (' . $key_data->label . ')'
+        );
 
         return true;
+    }
+    
+    /**
+     * Verify API Key from Database
+     */
+    private function verify_api_key($api_key) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'alm_api_keys';
+        
+        // Get all keys and use hash_equals for timing-attack safe comparison
+        $all_keys = $wpdb->get_results("SELECT * FROM {$table}");
+        
+        foreach ($all_keys as $key_data) {
+            if (hash_equals($key_data->api_key, $api_key)) {
+                return $key_data;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Update Key Usage Stats
+     */
+    private function update_key_usage($key_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'alm_api_keys';
+        
+        $wpdb->query($wpdb->prepare(
+            "UPDATE {$table} 
+            SET last_used_at = %s, 
+                total_requests = total_requests + 1 
+            WHERE id = %d",
+            current_time('mysql'),
+            $key_id
+        ));
     }
 
     private function is_ip_blocked($ip) {
         $failed_attempts = $this->get_recent_failed_attempts($ip);
-        return $failed_attempts >= 5; // Block after 5 failed attempts
+        return $failed_attempts >= 5;
     }
 
     private function get_recent_failed_attempts($ip) {
@@ -114,8 +168,8 @@ class ALM_Security {
         return (int)$count;
     }
 
-    private function log_failed_attempt($ip, $user_agent) {
-        $this->log_auth_event('auth_failed', $ip, $user_agent, 'failed', 'Authentication failed');
+    private function log_failed_attempt($ip, $user_agent, $reason = '') {
+        $this->log_auth_event('auth_failed', $ip, $user_agent, 'failed', 'Authentication failed: ' . $reason);
     }
 
     private function reset_failed_attempts($ip) {
@@ -146,48 +200,43 @@ class ALM_Security {
     }
 
     private function get_client_ip() {
-    // Use existing alm_sanitize_ip() function
-    if (function_exists('alm_sanitize_ip')) {
-        return alm_sanitize_ip();
+        if (function_exists('alm_sanitize_ip')) {
+            return alm_sanitize_ip();
+        }
+        
+        $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+        return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : 'unknown';
     }
     
-    // Fallback
-    $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-    return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : 'unknown';
-}
-    
-    
     public function get_security_status() {
-    global $wpdb;
-    
-    // Get current hour stats
-    $last_hour = date('Y-m-d H:i:s', strtotime('-1 hour'));
-    $current_stats = $wpdb->get_results($wpdb->prepare(
-        "SELECT 
-            COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed_attempts,
-            COUNT(CASE WHEN status = 'blocked' THEN 1 END) as blocked_attempts,
-            COUNT(CASE WHEN status = 'success' THEN 1 END) as successful_attempts
-        FROM {$this->auth_log_table}
-        WHERE attempt_time > %s",
-        $last_hour
-    ));
+        global $wpdb;
+        
+        $last_hour = date('Y-m-d H:i:s', strtotime('-1 hour'));
+        $current_stats = $wpdb->get_row($wpdb->prepare(
+            "SELECT 
+                COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed_attempts,
+                COUNT(CASE WHEN status = 'blocked' THEN 1 END) as blocked_attempts,
+                COUNT(CASE WHEN status = 'success' THEN 1 END) as successful_attempts
+            FROM {$this->auth_log_table}
+            WHERE attempt_time > %s",
+            $last_hour
+        ));
 
-    // Get unique blocked IPs
-    $blocked_ips = $wpdb->get_var($wpdb->prepare(
-        "SELECT COUNT(DISTINCT ip_address) 
-        FROM {$this->auth_log_table}
-        WHERE status = 'blocked'
-        AND attempt_time > %s",
-        $last_hour
-    ));
+        $blocked_ips = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(DISTINCT ip_address) 
+            FROM {$this->auth_log_table}
+            WHERE status = 'blocked'
+            AND attempt_time > %s",
+            $last_hour
+        ));
 
-    return array(
-        'failed_attempts' => $current_stats[0]->failed_attempts,
-        'blocked_ips' => $blocked_ips,
-        'successful_auth' => $current_stats[0]->successful_attempts,
-        'last_hour_total' => $current_stats[0]->failed_attempts + 
-                            $current_stats[0]->blocked_attempts + 
-                            $current_stats[0]->successful_attempts
-    );
-}
+        return array(
+            'failed_attempts' => $current_stats->failed_attempts ?? 0,
+            'blocked_ips' => $blocked_ips ?? 0,
+            'successful_auth' => $current_stats->successful_attempts ?? 0,
+            'last_hour_total' => ($current_stats->failed_attempts ?? 0) + 
+                                ($current_stats->blocked_attempts ?? 0) + 
+                                ($current_stats->successful_attempts ?? 0)
+        );
+    }
 }

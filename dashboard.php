@@ -1,13 +1,16 @@
 <?php
 // File: dashboard.php
 
-
 if (!defined('ABSPATH')) {
     exit;
 }
 
+// ONLY load in admin area
+if (!is_admin()) {
+    return; // ← FIX: Stop execution if not admin area
+}
+
 if ( ! is_user_logged_in() ) {
-    // Biarkan user login dulu, jangan blokir halaman login
     return;
 }
 

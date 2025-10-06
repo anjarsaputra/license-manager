@@ -18,15 +18,24 @@ require_once(ABSPATH . 'wp-includes/pluggable.php');
 require_once plugin_dir_path(__FILE__) . 'cleanup.php';
 require_once plugin_dir_path(__FILE__) . 'includes/logger.php';
 require_once plugin_dir_path(__FILE__) . 'includes/license-generator.php';
+
+require_once plugin_dir_path(__FILE__) . 'includes/migration-api-keys.php';
 add_action('plugins_loaded', function() {
     if (class_exists('WooCommerce')) {
         require_once plugin_dir_path(__FILE__) . 'includes/integrasi-woocommerce.php';
+        require_once plugin_dir_path(__FILE__) . 'includes/woocommerce-customer-portal/class-wc-license-tab.php';
+    require_once plugin_dir_path(__FILE__) . 'includes/woocommerce-customer-portal/tab-ajax.php';
+        require_once plugin_dir_path(__FILE__) . 'includes/woocommerce-customer-portal/rest-api-deactivate.php';
+
     }
 });
 // Di bagian atas setelah plugin header
 require_once plugin_dir_path(__FILE__) . 'includes/security.php';
 // Safe require files
-require_once plugin_dir_path(__FILE__) . 'dashboard.php';
+// Load admin dashboard (ONLY in admin area)
+if (is_admin()) {
+    require_once plugin_dir_path(__FILE__) . 'dashboard.php';
+}
 
 function alm_create_tables_on_activation() {
     global $wpdb;
@@ -34,7 +43,9 @@ function alm_create_tables_on_activation() {
     require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
     $table_prefix = $wpdb->prefix . 'alm_';
     
-   // Tabel Checksums untuk validasi lisensi
+    // ========================================
+    // TABLE: License Checksums
+    // ========================================
     $checksum_table = $table_prefix . 'license_checksums';
     $checksum_sql = "CREATE TABLE IF NOT EXISTS {$checksum_table} (
         id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -48,7 +59,9 @@ function alm_create_tables_on_activation() {
     ) $charset_collate;";
     dbDelta($checksum_sql);
     
-    // Tabel Lisensi
+    // ========================================
+    // TABLE: Licenses
+    // ========================================
     $license_table = $table_prefix . 'licenses';
     $license_sql = "CREATE TABLE IF NOT EXISTS {$license_table} (
         id mediumint(9) NOT NULL AUTO_INCREMENT,
@@ -66,7 +79,9 @@ function alm_create_tables_on_activation() {
     ) $charset_collate;";
     dbDelta($license_sql);
 
-    // Tabel Aktivasi
+    // ========================================
+    // TABLE: License Activations
+    // ========================================
     $activation_table = $table_prefix . 'license_activations';
     $activation_sql = "CREATE TABLE IF NOT EXISTS {$activation_table} (
         id mediumint(9) NOT NULL AUTO_INCREMENT,
@@ -81,7 +96,9 @@ function alm_create_tables_on_activation() {
     ) $charset_collate;";
     dbDelta($activation_sql);
 
-    // Tabel Log
+    // ========================================
+    // TABLE: Activity Logs
+    // ========================================
     $log_table = $table_prefix . 'logs';
     $log_sql = "CREATE TABLE IF NOT EXISTS {$log_table} (
         id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -99,21 +116,9 @@ function alm_create_tables_on_activation() {
     ) $charset_collate;";
     dbDelta($log_sql);
 
-    // Tabel Checksum
-    $checksum_table = $table_prefix . 'license_checksums';
-    $checksum_sql = "CREATE TABLE IF NOT EXISTS {$checksum_table} (
-        id bigint(20) NOT NULL AUTO_INCREMENT,
-        license_key varchar(255) NOT NULL,
-        checksum varchar(64) NOT NULL,
-        created_at datetime DEFAULT CURRENT_TIMESTAMP,
-        updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (id),
-        UNIQUE KEY license_key (license_key),
-        KEY checksum (checksum)
-    ) $charset_collate;";
-    dbDelta($checksum_sql);
-
-    // Tabel Security Events
+    // ========================================
+    // TABLE: Security Events
+    // ========================================
     $security_table = $wpdb->prefix . 'alm_security_events';
     $security_sql = "CREATE TABLE IF NOT EXISTS {$security_table} (
         id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -130,6 +135,53 @@ function alm_create_tables_on_activation() {
         KEY attempt_time (attempt_time)
     ) $charset_collate;";
     dbDelta($security_sql);
+    
+    // ========================================
+    // TABLE: API Keys (NEW!) ✅
+    // ========================================
+    $api_keys_table = $table_prefix . 'api_keys';
+    $api_keys_sql = "CREATE TABLE IF NOT EXISTS {$api_keys_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        api_key varchar(64) NOT NULL,
+        label varchar(100) DEFAULT NULL,
+        status varchar(20) DEFAULT 'active',
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        created_by bigint(20) unsigned DEFAULT NULL,
+        last_used_at datetime DEFAULT NULL,
+        total_requests bigint(20) DEFAULT 0,
+        disabled_at datetime DEFAULT NULL,
+        disabled_by bigint(20) unsigned DEFAULT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY api_key (api_key),
+        KEY status (status),
+        KEY last_used_at (last_used_at)
+    ) $charset_collate;";
+    dbDelta($api_keys_sql);
+    
+    // ========================================
+    // TABLE: Activity Log (Customer Portal Deactivate)
+    // ========================================
+    $activity_log_table = $table_prefix . 'activity_log';
+    $activity_log_sql = "CREATE TABLE IF NOT EXISTS {$activity_log_table} (
+        id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        user_id bigint(20) unsigned DEFAULT NULL,
+        action varchar(50) NOT NULL,
+        license_id bigint(20) unsigned DEFAULT NULL,
+        license_key varchar(100) DEFAULT NULL,
+        site_url varchar(255) DEFAULT NULL,
+        site_id bigint(20) unsigned DEFAULT NULL,
+        ip_address varchar(45) DEFAULT NULL,
+        status varchar(20) DEFAULT 'success',
+        reason text DEFAULT NULL,
+        metadata longtext DEFAULT NULL,
+        created_at datetime NOT NULL,
+        PRIMARY KEY (id),
+        KEY user_id (user_id),
+        KEY license_id (license_id),
+        KEY action (action),
+        KEY created_at (created_at)
+    ) $charset_collate;";
+    dbDelta($activity_log_sql);
 }
 
 // Setelah require files, tambahkan ini
@@ -1792,9 +1844,50 @@ function alm_render_update_settings_page() {
 
 
 function alm_render_settings_page() {
-    $secret_keys = get_option('alm_secret_keys', []);
-    $log_retention = get_option('alm_log_retention_days', 7);
+    // Tab navigation
+    $active_tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'api_keys';
+    ?>
+    <div class="wrap alm-wrap">
+        <div class="alm-header">
+            <h1>License Manager Settings</h1>
+        </div>
+        
+        <h2 class="nav-tab-wrapper">
+            <a href="?page=alm-settings&tab=api_keys" 
+               class="nav-tab <?php echo ($active_tab == 'api_keys') ? 'nav-tab-active' : ''; ?>">
+                🔑 API Secret Keys
+            </a>
+            <a href="?page=alm-settings&tab=email" 
+               class="nav-tab <?php echo ($active_tab == 'email') ? 'nav-tab-active' : ''; ?>">
+                📧 Email Settings
+            </a>
+        </h2>
+        
+        <?php
+        if ($active_tab == 'api_keys') {
+            // ✅ Load API Keys Management Page
+            $api_keys_file = plugin_dir_path(__FILE__) . 'includes/admin/api-keys-settings.php';
+            
+            if (file_exists($api_keys_file)) {
+                require_once $api_keys_file;
+                alm_render_api_keys_management_page();
+            } else {
+                echo '<div class="notice notice-error"><p><strong>Error:</strong> API Keys settings file not found at: ' . $api_keys_file . '</p></div>';
+            }
+            
+        } elseif ($active_tab == 'email') {
+            // ✅ Email Settings Tab
+            alm_render_email_settings_tab();
+        }
+        ?>
+    </div>
+    <?php
+}
 
+/**
+ * Email Settings Tab
+ */
+function alm_render_email_settings_tab() {
     // Email options
     $email_subject = get_option('alm_email_subject', '⚠️ Lisensi Anda Akan Berakhir dalam {days_left} Hari');
     $email_body = get_option('alm_email_body', '<h2>Hai, {user_name}!</h2><p>Lisensi Anda (<b>{license_key}</b>) akan <b>berakhir pada {expiry_date}</b>.<br>Sisa waktu: <b>{days_left} hari lagi</b>.</p><a href="{renewal_link}" style="background:#2d8cff;color:#fff;padding:12px 25px;text-decoration:none;border-radius:6px;display:inline-block;margin-top:18px;">Perpanjang Lisensi</a>');
@@ -1803,151 +1896,137 @@ function alm_render_settings_page() {
     $email_reminder_days = get_option('alm_email_reminder_days', [7,3,1]);
     $email_after_expired = get_option('alm_email_after_expired', 1);
     $email_enable = get_option('alm_email_enable', 1);
-
-    // Tab navigation
-    $active_tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'api_secret';
     ?>
-    <div class="wrap alm-wrap">
-        <div class="alm-header">
-            <h1>License Manager Settings</h1>
-        </div>
-        <h2 class="nav-tab-wrapper">
-            <a href="?page=alm-settings&tab=api_secret" class="nav-tab <?php echo ($active_tab == 'api_secret') ? 'nav-tab-active' : ''; ?>">API Secret Keys</a>
-            <a href="?page=alm-settings&tab=email" class="nav-tab <?php echo ($active_tab == 'email') ? 'nav-tab-active' : ''; ?>">Email Settings</a>
-        </h2>
-        <div class="alm-card alm-settings-card">
-            <?php if (isset($_GET['settings-updated'])) : ?>
-                <div class="notice notice-success is-dismissible" style="margin-bottom: 20px;"><p>Pengaturan berhasil disimpan.</p></div>
-            <?php endif; ?>
-
-            <?php if ($active_tab == 'api_secret') : ?>
-                <form method="post">
-                    <input type="hidden" name="alm_action" value="save_settings">
-                    <?php wp_nonce_field('alm_save_settings_nonce'); ?>
-                    <table class="form-table alm-form-table">
-                        <tbody>
-                            <tr>
-                                <th scope="row"><label for="alm_secret_keys">API Secret Keys</label></th>
-                                <td>
-                                    <textarea name="alm_secret_keys" id="alm_secret_keys" class="large-text" rows="5" placeholder="Satu kunci per baris..."><?php echo esc_textarea(implode("\n", $secret_keys)); ?></textarea>
-                                    <p class="description">Masukkan satu secret key per baris. Klien dapat menggunakan kunci mana pun dari daftar ini untuk autentikasi.</p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="alm_log_retention">Log Retention Period</label></th>
-                                <td>
-                                    <select name="alm_log_retention_days" id="alm_log_retention">
-                                        <option value="7" <?php selected($log_retention, 7); ?>>7 days</option>
-                                        <option value="14" <?php selected($log_retention, 14); ?>>14 days</option>
-                                        <option value="30" <?php selected($log_retention, 30); ?>>30 days</option>
-                                        <option value="60" <?php selected($log_retention, 60); ?>>60 days</option>
-                                        <option value="90" <?php selected($log_retention, 90); ?>>90 days</option>
-                                    </select>
-                                    <p class="description">Logs older than this will be automatically deleted.</p>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                    <p class="submit">
-                        <button type="submit" name="generate_new_key" class="button" value="1">Generate New & Save</button>
-                        <button type="submit" name="save_settings" class="button button-primary">Save Settings</button>
-                    </p>
-                </form>
-            <?php elseif ($active_tab == 'email') : ?>
-                <form method="post" id="alm-email-settings-form">
-                    <input type="hidden" name="alm_action" value="save_email_settings">
-                    <?php wp_nonce_field('alm_save_email_settings_nonce'); ?>
-                    <table class="form-table alm-form-table">
-                        <tbody>
-                            <tr>
-                                <th scope="row">Aktifkan Notifikasi Email</th>
-                                <td>
-                                    <label><input type="checkbox" name="alm_email_enable" value="1" <?php checked($email_enable, 1); ?>> Enable Email Notification</label>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row">Jadwal Reminder Expired</th>
-                                <td>
-                                    <label><input type="checkbox" name="alm_email_reminder_days[]" value="7" <?php if(in_array(7, (array)$email_reminder_days)) echo 'checked'; ?>> 7 hari sebelum expired</label><br>
-                                    <label><input type="checkbox" name="alm_email_reminder_days[]" value="3" <?php if(in_array(3, (array)$email_reminder_days)) echo 'checked'; ?>> 3 hari sebelum expired</label><br>
-                                    <label><input type="checkbox" name="alm_email_reminder_days[]" value="1" <?php if(in_array(1, (array)$email_reminder_days)) echo 'checked'; ?>> 1 hari sebelum expired</label>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row">Notifikasi Setelah Expired</th>
-                                <td>
-                                    <label><input type="checkbox" name="alm_email_after_expired" value="1" <?php checked($email_after_expired, 1); ?>> Kirim email setelah expired</label>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row">Email Pengirim</th>
-                                <td>
-                                    <input type="text" name="alm_email_sender" class="regular-text" value="<?php echo esc_attr($email_sender); ?>">
-                                    <p class="description">Alamat yang tampil sebagai pengirim email.</p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row">Reply-to</th>
-                                <td>
-                                    <input type="text" name="alm_email_replyto" class="regular-text" value="<?php echo esc_attr($email_replyto); ?>">
-                                    <p class="description">Email untuk balasan.</p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row">Subjek Email</th>
-                                <td>
-                                    <input type="text" name="alm_email_subject" class="large-text" value="<?php echo esc_attr($email_subject); ?>">
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row">Isi Email (HTML)</th>
-                                <td>
-                                    <textarea name="alm_email_body" class="large-text" rows="8"><?php echo esc_textarea($email_body); ?></textarea>
-                                    <p class="description">
-                                        Variabel yang bisa digunakan: <br>
-                                        <code>{user_name}</code>, <code>{license_key}</code>, <code>{expiry_date}</code>, <code>{days_left}</code>, <code>{renewal_link}</code>
-                                    </p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row">Preview Email</th>
-                                <td>
-                                    <button type="button" class="button" id="alm-preview-email-btn">Preview Email</button>
-                                    <button type="button" class="button" id="alm-test-email-btn">Kirim Tes Email ke Admin</button>
-                                    <div id="alm-preview-email" style="margin-top:18px;border:1px solid #ddd;padding:18px;max-width:520px;display:none;background:#fafbfc"></div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                    <p class="submit">
-                        <button type="submit" class="button button-primary">Save Email Settings</button>
-                    </p>
-                </form>
-                <script>
-                // Simple preview logic (client-side only for demo purpose)
-                document.getElementById('alm-preview-email-btn').onclick = function() {
-                    var body = document.querySelector('[name="alm_email_body"]').value;
-                    body = body.replace(/{user_name}/g, 'Andi')
-                               .replace(/{license_key}/g, 'LIC-1234-XXXX')
-                               .replace(/{expiry_date}/g, '2025-10-01')
-                               .replace(/{days_left}/g, '7')
-                               .replace(/{renewal_link}/g, 'https://yourplugin.com/renew');
-                    var preview = document.getElementById('alm-preview-email');
-                    preview.innerHTML = body;
-                    preview.style.display = 'block';
-                };
-                document.getElementById('alm-test-email-btn').onclick = function() {
-                    alert('Fitur kirim tes email perlu implementasi AJAX di backend.');
-                };
-                </script>
-            <?php endif; ?>
-        </div>
+    
+    <div class="alm-card alm-settings-card">
+        <?php if (isset($_GET['settings-updated'])) : ?>
+            <div class="notice notice-success is-dismissible" style="margin-bottom: 20px;">
+                <p>Pengaturan email berhasil disimpan.</p>
+            </div>
+        <?php endif; ?>
+        
+        <form method="post" id="alm-email-settings-form">
+            <input type="hidden" name="alm_action" value="save_email_settings">
+            <?php wp_nonce_field('alm_save_email_settings_nonce'); ?>
+            
+            <table class="form-table alm-form-table">
+                <tbody>
+                    <tr>
+                        <th scope="row">Aktifkan Notifikasi Email</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="alm_email_enable" value="1" <?php checked($email_enable, 1); ?>> 
+                                Enable Email Notification
+                            </label>
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row">Jadwal Reminder Expired</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="alm_email_reminder_days[]" value="7" <?php if(in_array(7, (array)$email_reminder_days)) echo 'checked'; ?>> 
+                                7 hari sebelum expired
+                            </label><br>
+                            <label>
+                                <input type="checkbox" name="alm_email_reminder_days[]" value="3" <?php if(in_array(3, (array)$email_reminder_days)) echo 'checked'; ?>> 
+                                3 hari sebelum expired
+                            </label><br>
+                            <label>
+                                <input type="checkbox" name="alm_email_reminder_days[]" value="1" <?php if(in_array(1, (array)$email_reminder_days)) echo 'checked'; ?>> 
+                                1 hari sebelum expired
+                            </label>
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row">Notifikasi Setelah Expired</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="alm_email_after_expired" value="1" <?php checked($email_after_expired, 1); ?>> 
+                                Kirim email setelah expired
+                            </label>
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row">Email Pengirim</th>
+                        <td>
+                            <input type="text" name="alm_email_sender" class="regular-text" value="<?php echo esc_attr($email_sender); ?>">
+                            <p class="description">Alamat yang tampil sebagai pengirim email.</p>
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row">Reply-to</th>
+                        <td>
+                            <input type="text" name="alm_email_replyto" class="regular-text" value="<?php echo esc_attr($email_replyto); ?>">
+                            <p class="description">Email untuk balasan.</p>
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row">Subjek Email</th>
+                        <td>
+                            <input type="text" name="alm_email_subject" class="large-text" value="<?php echo esc_attr($email_subject); ?>">
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row">Isi Email (HTML)</th>
+                        <td>
+                            <textarea name="alm_email_body" class="large-text" rows="8"><?php echo esc_textarea($email_body); ?></textarea>
+                            <p class="description">
+                                Variabel yang bisa digunakan: <br>
+                                <code>{user_name}</code>, <code>{license_key}</code>, <code>{expiry_date}</code>, 
+                                <code>{days_left}</code>, <code>{renewal_link}</code>
+                            </p>
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row">Preview Email</th>
+                        <td>
+                            <button type="button" class="button" id="alm-preview-email-btn">Preview Email</button>
+                            <button type="button" class="button" id="alm-test-email-btn">Kirim Tes Email ke Admin</button>
+                            <div id="alm-preview-email" style="margin-top:18px;border:1px solid #ddd;padding:18px;max-width:520px;display:none;background:#fafbfc"></div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <p class="submit">
+                <button type="submit" class="button button-primary">Save Email Settings</button>
+            </p>
+        </form>
+        
+        <script>
+        // Preview email
+        document.getElementById('alm-preview-email-btn').onclick = function() {
+            var body = document.querySelector('[name="alm_email_body"]').value;
+            body = body.replace(/{user_name}/g, 'Andi')
+                       .replace(/{license_key}/g, 'LIC-1234-XXXX')
+                       .replace(/{expiry_date}/g, '2025-10-01')
+                       .replace(/{days_left}/g, '7')
+                       .replace(/{renewal_link}/g, 'https://aratheme.id/renew');
+            
+            var preview = document.getElementById('alm-preview-email');
+            preview.innerHTML = body;
+            preview.style.display = 'block';
+        };
+        
+        // Test email
+        document.getElementById('alm-test-email-btn').onclick = function() {
+            alert('Fitur kirim tes email perlu implementasi AJAX di backend.');
+        };
+        </script>
     </div>
+    
     <style>
-        .nav-tab-wrapper { margin-bottom:20px; }
-        .alm-card { max-width:800px; }
-        .form-table th { width:210px; }
-        #alm-preview-email { border-radius:8px; }
+        .nav-tab-wrapper { margin-bottom: 20px; }
+        .alm-card { max-width: 800px; }
+        .form-table th { width: 210px; }
+        #alm-preview-email { border-radius: 8px; }
     </style>
     <?php
 }
