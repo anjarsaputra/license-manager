@@ -5,6 +5,11 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+
+// ✅ FIX: Skip loading saat AJAX request
+if (wp_doing_ajax()) {
+    return;  // STOP - jangan load dashboard admin saat AJAX
+}
 // ONLY load in admin area
 if (!is_admin()) {
     return; // ← FIX: Stop execution if not admin area
