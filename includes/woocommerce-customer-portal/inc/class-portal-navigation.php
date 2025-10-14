@@ -37,7 +37,7 @@ class WCP_Portal_Navigation {
         
         // Ensure "licenses" menu has correct label
         if (isset($items['licenses'])) {
-            $items['licenses'] = __('My Licenses', 'wc-customer-portal');
+            $items['licenses'] = __('Lisensi Saya', 'wc-customer-portal');
         }
         
         return $items;

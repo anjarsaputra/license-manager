@@ -40,29 +40,74 @@ unset($license);
     
     <!-- Header -->
     <div class="alm-licenses-header">
-        <h2><?php _e('My Licenses', 'alm'); ?></h2>
+        <h2><?php _e('Lisensi Saya', 'alm'); ?></h2>
         <p class="alm-licenses-description">
-            <?php _e('Manage your theme licenses, view downloads, and control site activations.', 'alm'); ?>
+            <?php _e('Kelola lisensi tema Anda, lihat unduhan, dan kontrol aktivasi situs.', 'alm'); ?>
         </p>
     </div>
 
-    <!-- Stats Summary -->
-    <?php if (!empty($licenses)) : ?>
-    <div class="alm-licenses-stats">
-        <div class="alm-stat-item">
-            <span class="alm-stat-number"><?php echo $stats['total']; ?></span>
-            <span class="alm-stat-label"><?php _e('Total Licenses', 'alm'); ?></span>
+ <div class="alm-licenses-stats-grid">
+    <div class="alm-stat-card orders">
+        <div class="alm-stat-icon-bg orders-bg">
+            <!-- Plus Icon -->
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <rect x="0" y="0" width="32" height="32" rx="10" fill="#3b82f6"/>
+                <path d="M16 10v12M10 16h12" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+            </svg>
         </div>
-        <div class="alm-stat-item alm-stat-active">
-            <span class="alm-stat-number"><?php echo $stats['active']; ?></span>
-            <span class="alm-stat-label"><?php _e('Active', 'alm'); ?></span>
-        </div>
-        <div class="alm-stat-item alm-stat-expired">
-            <span class="alm-stat-number"><?php echo $stats['expired']; ?></span>
-            <span class="alm-stat-label"><?php _e('Expired', 'alm'); ?></span>
+        <div>
+            <div class="alm-stat-number"><?php echo isset($stats['orders']) ? $stats['orders'] : 0; ?></div>
+            <div class="alm-stat-label-main"><?php _e('Jumlah Pesanan', 'alm'); ?></div>
+            <div class="alm-stat-label-desc">Semua Waktu</div>
         </div>
     </div>
-    <?php endif; ?>
+    <div class="alm-stat-card licenses">
+        <div class="alm-stat-icon-bg licenses-bg">
+    <!-- Shield Check Icon -->
+    <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+        <rect x="0" y="0" width="32" height="32" rx="10" fill="#10b981"/>
+        <!-- Shield shape -->
+        <path d="M16 7c3.5 0 7 1.4 7 3v5.5c0 5.3-5.1 8.3-7 8.5-1.9-0.2-7-3.2-7-8.5V10c0-1.6 3.5-3 7-3z" fill="#fff"/>
+        <!-- Check mark -->
+        <path d="M13.5 16.5l2 2 3-3" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </svg>
+</div>
+        <div>
+            <div class="alm-stat-number"><?php echo isset($stats['active']) ? $stats['active'] : 0; ?></div>
+            <div class="alm-stat-label-main"><?php _e('Lisensi Aktif', 'alm'); ?></div>
+            <div class="alm-stat-label-desc"><?php echo $stats['active']; ?> total</div>
+        </div>
+    </div>
+    <div class="alm-stat-card downloads">
+        <div class="alm-stat-icon-bg downloads-bg">
+            <!-- Download Icon -->
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <rect x="0" y="0" width="32" height="32" rx="10" fill="#f59e0b"/>
+                <path d="M16 10v12m0 0l-4-4m4 4l4-4" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+        </div>
+        <div>
+            <div class="alm-stat-number"><?php echo isset($stats['downloads']) ? $stats['downloads'] : 0; ?></div>
+            <div class="alm-stat-label-main"><?php _e('Unduh', 'alm'); ?></div>
+            <div class="alm-stat-label-desc">Tersedia sekarang</div>
+        </div>
+    </div>
+    <div class="alm-stat-card spent">
+        <div class="alm-stat-icon-bg spent-bg">
+            <!-- Dollar Icon -->
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <rect x="0" y="0" width="32" height="32" rx="10" fill="#8b5cf6"/>
+                <text x="16" y="22" text-anchor="middle" fill="#fff" font-size="18" font-family="Arial" font-weight="bold">$</text>
+            </svg>
+        </div>
+        <div>
+            <div class="alm-stat-number"><?php echo isset($stats['spent']) ? 'Rp' . $stats['spent'] : 'Rp0'; ?></div>
+            <div class="alm-stat-label-main"><?php _e('Yang dibelanjakan', 'alm'); ?></div>
+            <div class="alm-stat-label-desc">Selamanya</div>
+        </div>
+    </div>
+</div>
+
 
     <?php if (empty($licenses)) : ?>
         
@@ -74,18 +119,18 @@ unset($license);
                     <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                 </svg>
             </div>
-            <h3><?php _e('No licenses yet', 'alm'); ?></h3>
-            <p><?php _e('You haven\'t purchased any licensed products yet.', 'alm'); ?></p>
+            <h3><?php _e('Belum ada lisensi', 'alm'); ?></h3>
+            <p><?php _e('Anda belum membeli produk berlisensi apa pun.', 'alm'); ?></p>
             
             <?php if ($has_license_orders) : ?>
                 <div class="alm-notice alm-notice-info">
                     <strong><?php _e('Note:', 'alm'); ?></strong>
-                    <?php _e('You have orders with license products. Licenses will appear here once your order is completed.', 'alm'); ?>
+                    <?php _e('Anda memiliki pesanan dengan produk berlisensi. Lisensi akan muncul di sini setelah pesanan Anda selesai.', 'alm'); ?>
                 </div>
             <?php endif; ?>
             
             <a href="<?php echo esc_url(wc_get_page_permalink('shop')); ?>" class="button alm-btn-primary">
-                <?php _e('Browse Products', 'alm'); ?>
+                <?php _e('Beli Produk', 'alm'); ?>
             </a>
         </div>
 
@@ -340,15 +385,91 @@ unset($license);
             <line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
         <div class="alm-help-content">
-            <h3><?php _e('Need Help?', 'alm'); ?></h3>
-            <p><?php _e('If you have any questions about your licenses or need technical support, our team is here to help.', 'alm'); ?></p>
+            <h3><?php _e('Butuh Bantuan?', 'alm'); ?></h3>
+            <p><?php _e('Jika Anda memiliki pertanyaan tentang lisensi Anda atau memerlukan dukungan teknis, tim kami siap membantu.', 'alm'); ?></p>
             <a href="<?php echo esc_url(home_url('/contact')); ?>" class="button alm-btn-support">
-                <?php _e('Contact Support', 'alm'); ?>
+                <?php _e('Kontak dukungan', 'alm'); ?>
             </a>
         </div>
     </div>
 
 </div>
+
+<style>
+    
+.alm-licenses-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    width: 100%;
+}
+.alm-stat-card {
+    background: #fff;
+    border: 2px solid #e5e7eb;
+    border-radius: 16px;
+    box-shadow: 0 2px 8px rgba(59,130,246,0.04);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    min-height: 110px;
+    padding: 22px 28px;
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+.alm-stat-card:hover {
+    box-shadow: 0 4px 18px rgba(59,130,246,0.12);
+    border-color: #3b82f6;
+}
+.alm-stat-icon-bg {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-right: 6px;
+}
+.orders-bg { background: #3b82f6; }
+.licenses-bg { background: #10b981; }
+.downloads-bg { background: #f59e0b; }
+.spent-bg { background: #8b5cf6; }
+.alm-stat-number {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #111827;
+    margin-bottom: 4px;
+}
+.alm-stat-label-main {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #374151;
+    margin-bottom: 4px;
+}
+.alm-stat-label-desc {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #6b7280;
+}
+@media (max-width: 700px) {
+    .alm-licenses-stats-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    .alm-stat-card {
+        min-height: 72px;
+        padding: 12px 14px;
+        gap: 12px;
+    }
+    .alm-stat-icon-bg {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+    }
+    .alm-stat-number {
+        font-size: 1.25rem;
+    }
+}
+</style>
 
 <script>
 jQuery(document).ready(function($) {

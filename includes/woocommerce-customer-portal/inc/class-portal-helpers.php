@@ -147,11 +147,11 @@ class WCP_Portal_Helpers {
         $hour = current_time('H');
         
         if ($hour < 12) {
-            return __('Good Morning', 'wc-customer-portal');
+            return __('Selamat Pagi', 'wc-customer-portal');
         } elseif ($hour < 18) {
-            return __('Good Afternoon', 'wc-customer-portal');
+            return __('Selamat Siang', 'wc-customer-portal');
         } else {
-            return __('Good Evening', 'wc-customer-portal');
+            return __('Selamat Malam', 'wc-customer-portal');
         }
     }
     

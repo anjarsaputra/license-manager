@@ -54,6 +54,10 @@ function wcp_load_files() {
         'class-portal-assets.php',       // CSS/JS loading
         'class-portal-navigation.php',   // Menu customization
         'class-portal-dashboard.php',    // Dashboard page
+            'class-portal-orders.php',      // Custom order cards
+    'class-portal-downloads.php',   // Custom downloads UI
+    'class-portal-address.php',     // 🆕 Modern address & edit form
+
     ];
     
     foreach ($core_files as $file) {
@@ -97,6 +101,19 @@ function wcp_load_files() {
     if (class_exists('WC_License_Tab')) {
         WC_License_Tab::instance();
     }
+    
+    if (class_exists('WCP_Portal_Orders')) {
+    WCP_Portal_Orders::instance();
+}
+
+if (class_exists('WCP_Portal_Downloads')) {
+    WCP_Portal_Downloads::instance();
+}
+
+if (class_exists('WCP_Portal_Address')) {
+    WCP_Portal_Address::instance();
+}
+
 }
 add_action('plugins_loaded', 'wcp_load_files', 20);
 

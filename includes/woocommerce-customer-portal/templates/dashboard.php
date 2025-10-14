@@ -97,8 +97,8 @@ $recent_downloads = array_slice($downloads, 0, 3);
             </div>
             <div class="stat-content">
                 <div class="stat-value"><?php echo count($orders); ?></div>
-                <div class="stat-label"><?php _e('Total Orders', 'wc-customer-portal'); ?></div>
-                <div class="stat-trend"><?php _e('All time', 'wc-customer-portal'); ?></div>
+                <div class="stat-label"><?php _e('Total Pesanan', 'wc-customer-portal'); ?></div>
+                <div class="stat-trend"><?php _e('Semua Waktu', 'wc-customer-portal'); ?></div>
             </div>
         </div>
         
@@ -111,7 +111,7 @@ $recent_downloads = array_slice($downloads, 0, 3);
             </div>
             <div class="stat-content">
                 <div class="stat-value"><?php echo $stats['active']; ?></div>
-                <div class="stat-label"><?php _e('Active Licenses', 'wc-customer-portal'); ?></div>
+                <div class="stat-label"><?php _e('Lisensi Aktif', 'wc-customer-portal'); ?></div>
                 <div class="stat-trend"><?php echo $stats['total']; ?> <?php _e('total', 'wc-customer-portal'); ?></div>
             </div>
         </div>
@@ -126,8 +126,8 @@ $recent_downloads = array_slice($downloads, 0, 3);
             </div>
             <div class="stat-content">
                 <div class="stat-value"><?php echo count($downloads); ?></div>
-                <div class="stat-label"><?php _e('Downloads', 'wc-customer-portal'); ?></div>
-                <div class="stat-trend"><?php _e('Available now', 'wc-customer-portal'); ?></div>
+                <div class="stat-label"><?php _e('Unduh', 'wc-customer-portal'); ?></div>
+                <div class="stat-trend"><?php _e('Tersedia Sekarang', 'wc-customer-portal'); ?></div>
             </div>
         </div>
         
@@ -140,8 +140,8 @@ $recent_downloads = array_slice($downloads, 0, 3);
             </div>
             <div class="stat-content">
                 <div class="stat-value"><?php echo wc_price($total_spent); ?></div>
-                <div class="stat-label"><?php _e('Total Spent', 'wc-customer-portal'); ?></div>
-                <div class="stat-trend"><?php _e('Lifetime value', 'wc-customer-portal'); ?></div>
+                <div class="stat-label"><?php _e('Yang Dibelanjakan', 'wc-customer-portal'); ?></div>
+                <div class="stat-trend"><?php _e('Selamanya', 'wc-customer-portal'); ?></div>
             </div>
         </div>
         
@@ -149,7 +149,7 @@ $recent_downloads = array_slice($downloads, 0, 3);
 
     <!-- Quick Actions -->
     <div class="dashboard-section">
-        <h3 class="section-title"><?php _e('Quick Actions', 'wc-customer-portal'); ?></h3>
+        <h3 class="section-title"><?php _e('Tindakan Cepat', 'wc-customer-portal'); ?></h3>
         <div class="dashboard-actions">
             
             <a href="<?php echo esc_url(wc_get_account_endpoint_url('my-licenses')); ?>" class="action-btn btn-blue">
@@ -157,7 +157,7 @@ $recent_downloads = array_slice($downloads, 0, 3);
                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
                     <path d="M7 11V7a5 5 0 0110 0v4"/>
                 </svg>
-                <span class="btn-text"><?php _e('My Licenses', 'wc-customer-portal'); ?></span>
+                <span class="btn-text"><?php _e('Lisensi Saya', 'wc-customer-portal'); ?></span>
                 <?php if ($stats['active'] > 0) : ?>
                 <span class="btn-badge"><?php echo $stats['active']; ?></span>
                 <?php endif; ?>
@@ -167,7 +167,7 @@ $recent_downloads = array_slice($downloads, 0, 3);
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
                 </svg>
-                <span class="btn-text"><?php _e('Orders', 'wc-customer-portal'); ?></span>
+                <span class="btn-text"><?php _e('Pesanan', 'wc-customer-portal'); ?></span>
                 <?php if (count($orders) > 0) : ?>
                 <span class="btn-badge"><?php echo count($orders); ?></span>
                 <?php endif; ?>
@@ -179,7 +179,7 @@ $recent_downloads = array_slice($downloads, 0, 3);
                     <polyline points="7 10 12 15 17 10"/>
                     <line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
-                <span class="btn-text"><?php _e('Downloads', 'wc-customer-portal'); ?></span>
+                <span class="btn-text"><?php _e('Unduh', 'wc-customer-portal'); ?></span>
                 <?php if (count($downloads) > 0) : ?>
                 <span class="btn-badge"><?php echo count($downloads); ?></span>
                 <?php endif; ?>
@@ -191,7 +191,7 @@ $recent_downloads = array_slice($downloads, 0, 3);
                     <circle cx="20" cy="21" r="1"/>
                     <path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/>
                 </svg>
-                <span class="btn-text"><?php _e('Shop', 'wc-customer-portal'); ?></span>
+                <span class="btn-text"><?php _e('Belanja', 'wc-customer-portal'); ?></span>
             </a>
             
         </div>
@@ -206,7 +206,7 @@ $recent_downloads = array_slice($downloads, 0, 3);
             <!-- Recent Licenses -->
             <div class="dashboard-section">
                 <h3 class="section-title">
-                    <?php _e('Recent Licenses', 'wc-customer-portal'); ?>
+                    <?php _e('Lisensi Terbaru', 'wc-customer-portal'); ?>
                     <?php if (count($licenses) > 3) : ?>
                     <a href="<?php echo esc_url(wc_get_account_endpoint_url('my-licenses')); ?>" class="view-all-link">
                         <?php printf(__('View All (%d) →', 'wc-customer-portal'), count($licenses)); ?>
@@ -254,9 +254,9 @@ $recent_downloads = array_slice($downloads, 0, 3);
                         <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
                         <path d="M7 11V7a5 5 0 0110 0v4"/>
                     </svg>
-                    <p><?php _e('No licenses yet', 'wc-customer-portal'); ?></p>
+                    <p><?php _e('Belum ada lisensi', 'wc-customer-portal'); ?></p>
                     <a href="<?php echo esc_url(get_permalink(wc_get_page_id('shop'))); ?>" class="btn-primary-small">
-                        <?php _e('Browse Products', 'wc-customer-portal'); ?>
+                        <?php _e('Beli Produk', 'wc-customer-portal'); ?>
                     </a>
                 </div>
                 <?php endif; ?>
@@ -264,7 +264,7 @@ $recent_downloads = array_slice($downloads, 0, 3);
 
             <!-- Recent Downloads -->
             <div class="dashboard-section">
-                <h3 class="section-title"><?php _e('Recent Downloads', 'wc-customer-portal'); ?></h3>
+                <h3 class="section-title"><?php _e('Unduhan Terbaru', 'wc-customer-portal'); ?></h3>
                 <?php if ($recent_downloads) : ?>
                 <ul class="downloads-list">
                     <?php foreach ($recent_downloads as $download) : ?>
@@ -292,7 +292,7 @@ $recent_downloads = array_slice($downloads, 0, 3);
                         <polyline points="7 10 12 15 17 10"/>
                         <line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
-                    <span><?php _e('No downloads available', 'wc-customer-portal'); ?></span>
+                    <span><?php _e('Tidak ada unduhan yang tersedia', 'wc-customer-portal'); ?></span>
                 </div>
                 <?php endif; ?>
             </div>
@@ -305,7 +305,7 @@ $recent_downloads = array_slice($downloads, 0, 3);
             <!-- Recent Orders -->
             <div class="dashboard-section">
                 <h3 class="section-title">
-                    <?php _e('Recent Orders', 'wc-customer-portal'); ?>
+                    <?php _e('Pesanan Terbaru', 'wc-customer-portal'); ?>
                     <?php if (count($orders) > 3) : ?>
                     <a href="<?php echo esc_url(wc_get_account_endpoint_url('orders')); ?>" class="view-all-link">
                         <?php _e('View All →', 'wc-customer-portal'); ?>
@@ -344,31 +344,31 @@ $recent_downloads = array_slice($downloads, 0, 3);
                     <svg class="empty-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                         <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
                     </svg>
-                    <span><?php _e('No orders yet', 'wc-customer-portal'); ?></span>
+                    <span><?php _e('Belum ada pesanan', 'wc-customer-portal'); ?></span>
                 </div>
                 <?php endif; ?>
             </div>
 
             <!-- Account Summary -->
             <div class="dashboard-section account-summary">
-                <h3 class="section-title"><?php _e('Account Summary', 'wc-customer-portal'); ?></h3>
+                <h3 class="section-title"><?php _e('Ringkasan Akun', 'wc-customer-portal'); ?></h3>
                 <div class="summary-content">
                     <div class="summary-item">
                         <span class="summary-label"><?php _e('Email', 'wc-customer-portal'); ?></span>
                         <span class="summary-value"><?php echo esc_html($current_user->user_email); ?></span>
                     </div>
                     <div class="summary-item">
-                        <span class="summary-label"><?php _e('Member Since', 'wc-customer-portal'); ?></span>
+                        <span class="summary-label"><?php _e('Anggota Sejak', 'wc-customer-portal'); ?></span>
                         <span class="summary-value">
                             <?php echo date_i18n('F Y', strtotime($current_user->user_registered)); ?>
                         </span>
                     </div>
                     <div class="summary-item">
-                        <span class="summary-label"><?php _e('Total Spent', 'wc-customer-portal'); ?></span>
+                        <span class="summary-label"><?php _e('Total Belanja', 'wc-customer-portal'); ?></span>
                         <span class="summary-value"><?php echo wc_price($total_spent); ?></span>
                     </div>
                     <a href="<?php echo esc_url(wc_get_account_endpoint_url('edit-account')); ?>" class="btn-edit-account">
-                        <?php _e('Edit Account Details', 'wc-customer-portal'); ?>
+                        <?php _e('Edit Akun', 'wc-customer-portal'); ?>
                     </a>
                 </div>
             </div>
