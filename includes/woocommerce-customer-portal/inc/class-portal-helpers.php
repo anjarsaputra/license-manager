@@ -167,10 +167,125 @@ class WCP_Portal_Helpers {
             return [];
         }
         
-        // Simple query - no status column in ALM table
         return $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM {$table_name} WHERE license_id = %d ORDER BY activated_at DESC",
             $license_id
         ));
     }
+
+        /**
+     * AUTO GENERATE LICENSE AFTER PURCHASE (1-year validity)
+     */
+    /**
+ * Generate license automatically when order is completed
+ */
+public static function generate_license_on_order($order_id) {
+    if (!$order_id) return;
+
+    $order = wc_get_order($order_id);
+    if (!$order) return;
+
+    $email = $order->get_billing_email();
+    $user_id = $order->get_user_id();
+
+    global $wpdb;
+    $table = $wpdb->prefix . 'alm_licenses';
+
+    // Load generator
+    if (!class_exists('ALM_License_Generator')) {
+        require_once WP_PLUGIN_DIR . '/license-manager/includes/license-generator.php';
+    }
+
+    $generator = ALM_License_Generator::get_instance();
+
+    foreach ($order->get_items() as $item) {
+        $product_id = $item->get_product_id();
+        $product_name = $item->get_name();
+
+        // Hindari duplikat lisensi untuk produk yang sama
+        $exists = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$table} WHERE product_name = %s AND customer_email = %s",
+            $product_name,
+            $email
+        ));
+        if ($exists > 0) continue;
+
+        // ✅ Generate license key pakai sistem kamu
+        $license_key = $generator->generate_license_key();
+
+        // Hitung expired date (1 tahun dari sekarang)
+        $expires = date('Y-m-d H:i:s', strtotime('+1 year'));
+
+        // Simpan ke database
+        $wpdb->insert($table, [
+            'license_key'     => $license_key,
+            'product_name'    => $product_name,
+            'customer_email'  => $email,
+            'status'          => 'active',
+            'activations'     => 0,
+            'activation_limit'=> 1,
+            'created_at'      => current_time('mysql'),
+            'expires'         => $expires,
+        ]);
+    }
 }
+
+    
+        /**
+     * CRON: Auto mark expired licenses in database
+     */
+        /**
+     * CRON: Auto mark expired licenses in database
+     */
+    public static function check_and_expire_licenses() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'alm_licenses';
+
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$table}'") != $table) {
+            return;
+        }
+
+        $now = current_time('mysql');
+
+        // Update semua lisensi yang sudah lewat tanggal expired
+        $updated = $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE {$table}
+                 SET status = 'expired'
+                 WHERE expires IS NOT NULL
+                 AND expires != '0000-00-00 00:00:00'
+                 AND expires < %s
+                 AND status != 'expired'",
+                $now
+            )
+        );
+
+        if ($updated) {
+            error_log("WCP: {$updated} license(s) marked as expired.");
+        }
+    }
+
+
+
+}
+
+// === Hook: auto generate license saat order selesai ===
+add_action('woocommerce_order_status_completed', ['WCP_Portal_Helpers', 'generate_license_on_order']);
+add_action('woocommerce_order_status_processing', ['WCP_Portal_Helpers', 'generate_license_on_order']);
+
+// === Custom interval: 6 hours ===
+add_filter('cron_schedules', function($schedules) {
+    if (!isset($schedules['six_hours'])) {
+        $schedules['six_hours'] = [
+            'interval' => 6 * 60 * 60, // 6 jam dalam detik
+            'display'  => __('Every 6 Hours', 'wc-customer-portal')
+        ];
+    }
+    return $schedules;
+});
+
+// === Schedule event: check lisensi kadaluarsa ===
+if (!wp_next_scheduled('wcp_expire_licenses_event')) {
+    wp_schedule_event(time(), 'six_hours', 'wcp_expire_licenses_event');
+}
+add_action('wcp_expire_licenses_event', ['WCP_Portal_Helpers', 'check_and_expire_licenses']);

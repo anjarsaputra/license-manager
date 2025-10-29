@@ -11,6 +11,7 @@ if (!defined('ABSPATH')) {
 }
 
 
+
 // Safe require file
 $function_file = plugin_dir_path(__FILE__) . 'function.php';
 $api_file = plugin_dir_path(__FILE__) . 'api/license-api.php';
@@ -18,6 +19,19 @@ require_once(ABSPATH . 'wp-includes/pluggable.php');
 require_once plugin_dir_path(__FILE__) . 'cleanup.php';
 require_once plugin_dir_path(__FILE__) . 'includes/logger.php';
 require_once plugin_dir_path(__FILE__) . 'includes/license-generator.php';
+
+// Load email notification handler
+if (file_exists(plugin_dir_path(__FILE__) . 'includes/email-handler.php')) {
+    require_once plugin_dir_path(__FILE__) . 'includes/email-handler.php';
+}
+
+// ===== TRANSFER CONTROL SYSTEM =====
+require_once plugin_dir_path(__FILE__) . 'includes/transfer-control-migration.php';
+require_once plugin_dir_path(__FILE__) . 'includes/transfer-control.php';
+require_once plugin_dir_path(__FILE__) . 'includes/transfer-control-api.php';
+require_once plugin_dir_path(__FILE__) . 'includes/transfer-control-admin-ui.php';
+
+
 
 require_once plugin_dir_path(__FILE__) . 'includes/migration-api-keys.php';
 add_action('plugins_loaded', function() {
@@ -690,6 +704,8 @@ function alm_register_admin_menus() {
         'alm-settings',
         'alm_render_settings_page'
     );
+    
+    
 
     // Hidden submenu untuk Edit License
     add_submenu_page(
@@ -728,21 +744,25 @@ function alm_handle_actions() {
             'expires' => empty($_POST['expires']) ? null : sanitize_text_field($_POST['expires']),
             'status' => sanitize_text_field($_POST['status'])
         ]);
+        
+        
         wp_safe_redirect(admin_url('admin.php?page=advanced-license-manager&add_success=true'));
         exit;
     }
+    
+
+
 // Edit Lisensi
-if (
-    isset($_POST['update_license']) &&
-    isset($_POST['license_id']) &&
-    isset($_POST['_wpnonce']) &&
-    wp_verify_nonce($_POST['_wpnonce'], 'alm_edit_nonce_' . $_POST['license_id'])
-) {
+if (isset($_POST['update_license']) && 
+    isset($_POST['license_id']) && 
+    isset($_POST['_wpnonce']) && 
+    wp_verify_nonce($_POST['_wpnonce'], 'alm_edit_nonce_' . $_POST['license_id'])) {
+    
     $license_id = intval($_POST['license_id']);
     $new_status = sanitize_text_field($_POST['status']);
     
-    // Cek apakah status diubah ke revoked
-    if ($new_status === 'revoked') {
+    // ✅ Cek apakah status diubah ke revoked
+    if ($new_status == 'revoked') {
         // Hapus semua aktivasi untuk lisensi ini
         $wpdb->delete($activation_table, ['license_id' => $license_id]);
         
@@ -754,15 +774,15 @@ if (
             'activation_limit' => intval($_POST['activation_limit']),
             'expires' => empty($_POST['expires']) ? null : sanitize_text_field($_POST['expires']),
             'status' => $new_status,
-            'activations' => 0 // Reset aktivasi ke 0
+            'activations' => 0 // ✅ Reset aktivasi ke 0
         ], ['id' => $license_id]);
-
+        
         // Log aktivitas revoke via edit
         if (function_exists('alm_insert_log')) {
             alm_insert_log(
                 sanitize_text_field($_POST['license_key']),
                 'revoke',
-                'Lisensi dinonaktifkan (revoked) melalui edit. Semua aktivasi dihapus.',
+                'License revoked via status change. All activations removed.',
                 ''
             );
         }
@@ -777,10 +797,11 @@ if (
             'status' => $new_status
         ], ['id' => $license_id]);
     }
-
+    
     wp_safe_redirect(admin_url('admin.php?page=alm-edit-license&id=' . $license_id . '&update_success=true'));
     exit;
 }
+
 
     // Revoke Lisensi
    if (
@@ -829,21 +850,49 @@ if (
     }
 
     // Remote Deactivate
+ 
+
     if (
-        isset($_GET['action']) && $_GET['action'] === 'remote_deactivate' &&
-        isset($_GET['activation_id']) &&
-        isset($_GET['_wpnonce']) &&
-        wp_verify_nonce($_GET['_wpnonce'], 'alm_remote_deactivate_' . $_GET['activation_id'])
-    ) {
-        $activation_id = intval($_GET['activation_id']);
-        $activation = $wpdb->get_row($wpdb->prepare("SELECT license_id FROM $activation_table WHERE id = %d", $activation_id));
-        if ($activation) {
-            $wpdb->delete($activation_table, ['id' => $activation_id]);
-            $wpdb->query($wpdb->prepare("UPDATE $license_table SET activations = GREATEST(0, activations - 1) WHERE id = %d", $activation->license_id));
-            wp_safe_redirect(admin_url('admin.php?page=alm-edit-license&id=' . $activation->license_id . '&deactivate_success=true'));
-            exit;
-        }
+    isset($_GET['action']) && $_GET['action'] === 'remote_deactivate' &&
+    isset($_GET['activation_id']) &&
+    isset($_GET['_wpnonce']) &&
+    wp_verify_nonce($_GET['_wpnonce'], 'alm_remote_deactivate_' . $_GET['activation_id'])
+) {
+    $activation_id = intval($_GET['activation_id']);
+    // Ambil detail SEBELUM delete!
+    $activation_detail = $wpdb->get_row($wpdb->prepare(
+        "SELECT a.siteurl, l.licensekey, l.productname FROM $activationtable a JOIN $licensetable l ON a.licenseid = l.id WHERE a.id = %d",
+        $activation_id
+    ));
+    if ($activation_detail) {
+        $wpdb->delete($activationtable, ['id' => $activation_id]);
+        $wpdb->query($wpdb->prepare(
+            "UPDATE $licensetable SET activations = GREATEST(0, activations - 1) WHERE id = (
+                SELECT licenseid FROM $activationtable WHERE id = %d
+            )", $activation_id
+        ));
+        // KIRIM webhook ke klien
+        $webhook_url = rtrim($activation_detail->siteurl, '/') . '/wp-json/alm/v1/license-deactivated';
+        $webhook_secret = 'mediman_webhook_2760ee05bbac6c3a069d540ab3ed50c4';
+        $payload = [
+            'action'        => 'license_deactivated',
+            'license_key'   => $activation_detail->licensekey,
+            'site_url'      => $activation_detail->siteurl,
+            'deactivated_at'=> gmdate('Y-m-d H:i:s'),
+            'product_name'  => $activation_detail->productname ?? 'Mediman',
+            'server_url'    => home_url(),
+            'server_time'   => time(),
+            'message'       => 'Dinonaktifkan dari admin'
+        ];
+        alm_send_webhook_license_deactivated($webhook_url, $payload, $webhook_secret);
     }
+    wp_safe_redirect(admin_url('admin.php?page=alm-edit-license&id=' . $activation->license_id . '&deactivate_success=true'));
+    exit;
+}
+
+   
+    
+   
 
     // Simpan Pengaturan
     if (
@@ -863,6 +912,77 @@ if (
         wp_safe_redirect(admin_url('admin.php?page=alm-settings&settings-updated=true'));
         exit;
     }
+    
+    // ✅ TRANSFER CONTROL ACTIONS
+// Reset Transfer Count
+if (
+    isset($_GET['action']) && $_GET['action'] === 'reset_transfer' &&
+    isset($_GET['id']) &&
+    isset($_GET['_wpnonce']) &&
+    wp_verify_nonce($_GET['_wpnonce'], 'reset_transfer_' . $_GET['id'])
+) {
+    $license_id = intval($_GET['id']);
+    $wpdb->update(
+        $license_table,
+        ['transfer_count' => 0, 'last_transfer_date' => null],
+        ['id' => $license_id]
+    );
+    
+    if (function_exists('alm_insert_log')) {
+        $license = $wpdb->get_row($wpdb->prepare("SELECT license_key FROM $license_table WHERE id = %d", $license_id));
+        alm_insert_log($license->license_key, 'transfer_reset', 'Transfer count reset by admin', '');
+    }
+    
+    wp_safe_redirect(admin_url('admin.php?page=alm-edit-license&id=' . $license_id . '&transfer_reset=true'));
+    exit;
+}
+
+// Lock Domain
+if (
+    isset($_GET['action']) && $_GET['action'] === 'lock_domain' &&
+    isset($_GET['id']) &&
+    isset($_GET['_wpnonce']) &&
+    wp_verify_nonce($_GET['_wpnonce'], 'lock_domain_' . $_GET['id'])
+) {
+    $license_id = intval($_GET['id']);
+    $wpdb->update(
+        $license_table,
+        ['domain_locked' => 1],
+        ['id' => $license_id]
+    );
+    
+    if (function_exists('alm_insert_log')) {
+        $license = $wpdb->get_row($wpdb->prepare("SELECT license_key FROM $license_table WHERE id = %d", $license_id));
+        alm_insert_log($license->license_key, 'domain_lock', 'Domain locked by admin', '');
+    }
+    
+    wp_safe_redirect(admin_url('admin.php?page=alm-edit-license&id=' . $license_id . '&domain_locked=true'));
+    exit;
+}
+
+// Unlock Domain
+if (
+    isset($_GET['action']) && $_GET['action'] === 'unlock_domain' &&
+    isset($_GET['id']) &&
+    isset($_GET['_wpnonce']) &&
+    wp_verify_nonce($_GET['_wpnonce'], 'unlock_domain_' . $_GET['id'])
+) {
+    $license_id = intval($_GET['id']);
+    $wpdb->update(
+        $license_table,
+        ['domain_locked' => 0],
+        ['id' => $license_id]
+    );
+    
+    if (function_exists('alm_insert_log')) {
+        $license = $wpdb->get_row($wpdb->prepare("SELECT license_key FROM $license_table WHERE id = %d", $license_id));
+        alm_insert_log($license->license_key, 'domain_unlock', 'Domain unlocked by admin', '');
+    }
+    
+    wp_safe_redirect(admin_url('admin.php?page=alm-edit-license&id=' . $license_id . '&domain_unlocked=true'));
+    exit;
+}
+
 }
 
 function alm_handle_update_upload_form() {
@@ -1276,6 +1396,15 @@ function alm_render_licenses_page() {
     } else {
         $licenses = $wpdb->get_results($wpdb->prepare($sql, [$items_per_page, $offset]));
     }
+  
+
+    
+   
+
+
+    
+    
+    
     ?>
     <div class="wrap alm-wrap">
         <div class="alm-header">
@@ -1305,62 +1434,99 @@ function alm_render_licenses_page() {
         <div class="alm-card">
             <div class="alm-table-container">
                 <table class="alm-table">
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Author</th>
-                            <th>License Key</th>
-                            <th>Domains</th>
-                            <th>Status</th>
-                            <th>Expired</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php
-                        if (empty($licenses)) {
-                            echo '<tr><td colspan="7">No licenses found matching your criteria.</td></tr>';
-                        } else {
-                            $i = $offset + 1;
-                            foreach ($licenses as $license) {
-                                $status_class = 'alm-status-' . esc_attr($license->status);
-                                $avatar_url = get_avatar_url($license->customer_email, ['size' => 80]);
-                                ?>
-                                <tr>
-                                    <td><?php echo $i; ?></td>
-                                    <td>
-                                        <div class="alm-author-cell">
-                                            <img src="<?php echo esc_url($avatar_url); ?>" alt="<?php echo esc_attr($license->customer_email); ?>">
-                                            <div class="alm-author-info">
-                                                <strong><?php echo esc_html($license->product_name); ?></strong>
-                                                <span><?php echo esc_html($license->customer_email); ?></span>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <code><?php echo esc_html($license->license_key); ?></code>
-                                    </td>
-                                    <td>
-                                        <strong><?php echo esc_html($license->activations) . ' / ' . esc_html($license->activation_limit); ?></strong>
-                                    </td>
-                                    <td>
-                                        <span class="alm-status-badge <?php echo $status_class; ?>"><?php echo esc_html($license->status); ?></span>
-                                    </td>
-                                    <td>
-                                        <?php echo esc_html($license->expires ? date_i18n('d/m/y', strtotime($license->expires)) : 'Never'); ?>
-                                    </td>
-                                    <td class="alm-action-links">
-                                        <a href="?page=alm-edit-license&id=<?php echo esc_attr($license->id); ?>">Edit</a> |
-                                        <a href="<?php echo esc_url(wp_nonce_url('?page=advanced-license-manager&delete=' . $license->id, 'alm_delete_license_' . $license->id)); ?>" class="delete-link" onclick="return confirm('Anda yakin ingin menghapus lisensi ini secara permanen?')">Delete</a>
-                                    </td>
-                                </tr>
-                                <?php
-                                $i++;
-                            }
-                        }
-                        ?>
-                    </tbody>
-                </table>
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Author</th>
+            <th>License Key</th>
+            <th>Domains</th>
+            <th>Transfer</th> <!-- ✅ Simplified header -->
+            <th>Status</th>
+            <th>Expired</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+   <tbody>
+<?php
+if (empty($licenses)) {
+    echo '<tr><td colspan="8">No licenses found.</td></tr>';
+} else {
+    $i = $offset + 1;
+    foreach ($licenses as $license) {
+        // Semua proses dalam foreach!
+        
+         $slot_rows = $wpdb->get_results(
+    $wpdb->prepare(
+        "SELECT transfer_count FROM {$wpdb->prefix}alm_license_activations WHERE license_id = %d",
+        $license->id
+    )
+);
+
+        $license_id = $license->id;
+        $limit = isset($license->activation_limit) ? (int)$license->activation_limit : 1;
+        $current = (int) $wpdb->get_var(
+            $wpdb->prepare("SELECT COUNT(*) FROM {$wpdb->prefix}alm_license_activations WHERE license_id = %d", $license_id)
+        );
+
+        // Table Row
+        ?>
+        <tr>
+            <td><?php echo $i; ?></td>
+            <td>
+                <div class="alm-author-cell">
+                    <img src="<?php echo esc_url(get_avatar_url($license->customer_email, ['size' => 80])); ?>" alt="">
+                    <div class="alm-author-info">
+                        <strong><?php echo esc_html($license->product_name); ?></strong>
+                        <span><?php echo esc_html($license->customer_email); ?></span>
+                    </div>
+                </div>
+            </td>
+            <td>
+                <code><?php echo esc_html($license->license_key); ?></code>
+            </td>
+            <td>
+                <strong><?php echo esc_html($license->activations) . ' / ' . esc_html($license->activation_limit); ?></strong>
+            </td>
+            <!-- Transfer -->
+            <td>
+                <div style="font-size:13px;line-height:1.6;">
+                    <strong><?php echo $current . ' / ' . $limit; ?></strong>
+                    <?php
+                    // Last transfer date
+                    if (!empty($license->last_transfer_date) && $license->last_transfer_date != '0000-00-00 00:00:00') {
+                        echo '<br><small style="color:#94a3b8;">Last: ' . date('d M', strtotime($license->last_transfer_date)) . '</small>';
+                    }
+                    if (isset($license->domain_locked) && $license->domain_locked == 1) {
+                        echo '<br><span style="display:inline-block;padding:2px 8px;background:#fee2e2;color:#dc2626;font-size:11px;border-radius:3px;margin-top:2px;">🔒 Locked</span>';
+                    }
+                    ?>
+                </div>
+            </td>
+            <td>
+                <span class="alm-status-badge alm-status-<?php echo esc_attr($license->status); ?>">
+                    <?php echo esc_html($license->status); ?>
+                </span>
+            </td>
+            <td>
+                <?php echo esc_html($license->expires ? date_i18n('d/m/y', strtotime($license->expires)) : 'Never'); ?>
+            </td>
+            <td class="alm-action-links">
+                <a href="?page=alm-edit-license&id=<?php echo esc_attr($license->id); ?>">Edit</a> |
+                <a href="<?php echo esc_url(wp_nonce_url('?page=advanced-license-manager&delete=' . $license->id, 'alm_delete_license_' . $license->id)); ?>" 
+                   class="delete-link" 
+                   onclick="return confirm('Delete this license permanently?')">Delete</a>
+            </td>
+        </tr>
+        <?php
+        $i++;
+    }
+}
+?>
+</tbody>
+
+</table>
+
+
             </div>
             
             <!-- [NEW] Pagination Display -->
@@ -1401,11 +1567,17 @@ function alm_render_licenses_page() {
     <?php
 }
 
+/**
+ * =====================================================
+ * ADD LICENSE FORM - ENHANCED
+ * =====================================================
+ */
 function alm_render_add_license_page() {
+    // ✅ Generate license key
     $generator = ALM_License_Generator::get_instance();
     $new_generated_key = $generator->generate_license_key();
+    
     if (!$new_generated_key) {
-        // Handle error
         wp_die('Error generating license key. Please try again.');
     }
     ?>
@@ -1414,112 +1586,489 @@ function alm_render_add_license_page() {
             <h1>Add New License</h1>
             <a href="?page=advanced-license-manager" class="button">Back to List</a>
         </div>
+
         <div class="alm-card alm-settings-card">
             <form method="post">
                 <?php wp_nonce_field('alm_add_new_nonce'); ?>
+                
                 <table class="form-table alm-form-table"><tbody>
-                    <tr><th scope="row"><label for="alm-product-name">Product Name</label></th><td><input type="text" id="alm-product-name" name="product_name" value="Mediman" required class="regular-text"></td></tr>
-                    <tr><th scope="row"><label for="alm-license-key">License Key</label></th><td><input type="text" id="alm-license-key" name="license_key" value="<?php echo esc_attr($new_generated_key); ?>" required class="regular-text" onfocus="this.select()"></td></tr>
-                    <tr><th scope="row"><label for="alm-customer-email">Customer Email</label></th><td><input type="email" id="alm-customer-email" name="customer_email" class="regular-text"></td></tr>
-                    <tr><th scope="row"><label for="alm-activation-limit">Activation Limit</label></th><td><input type="number" id="alm-activation-limit" name="activation_limit" min="1" value="1" class="small-text"></td></tr>
-                    <tr><th scope="row"><label for="alm-expires">Expires</label></th><td><input type="date" id="alm-expires" name="expires"><p class="description">Biarkan kosong jika tidak ada masa kedaluwarsa.</p></td></tr>
-                    <tr><th scope="row"><label for="alm-status">Status</label></th><td><select id="alm-status" name="status"><option value="active" selected>Active</option><option value="inactive">Inactive</option><option value="revoked">Revoked</option></select></td></tr>
+                    <!-- Product Name -->
+                    <tr>
+                        <th scope="row">
+                            <label for="alm-product-name">Product Name <span style="color:#dc2626;">*</span></label>
+                        </th>
+                        <td>
+                            <input type="text" 
+                                   id="alm-product-name" 
+                                   name="productname" 
+                                   value="Mediman" 
+                                   required 
+                                   class="regular-text"
+                                   pattern="[A-Za-z0-9\s\-]+"
+                                   title="Only letters, numbers, spaces, and hyphens allowed">
+                            <p class="description">Theme or product name</p>
+                        </td>
+                    </tr>
+
+                    <!-- License Key -->
+                    <tr>
+                        <th scope="row">
+                            <label for="alm-license-key">License Key <span style="color:#dc2626;">*</span></label>
+                        </th>
+                        <td>
+                            <div style="display:flex;gap:10px;align-items:center;">
+                                <input type="text" 
+                                       id="alm-license-key" 
+                                       name="licensekey" 
+                                       value="<?php echo esc_attr($new_generated_key); ?>" 
+                                       required 
+                                       class="regular-text" 
+                                       readonly
+                                       style="font-family:monospace;background:#f9fafb;">
+                                
+                                <button type="button" 
+                                        id="alm-copy-key-btn" 
+                                        class="button"
+                                        title="Copy to clipboard">
+                                    <span class="dashicons dashicons-clipboard" style="margin:6px 0 0 0;"></span>
+                                </button>
+                                
+                                <button type="button" 
+                                        id="alm-regenerate-key-btn" 
+                                        class="button"
+                                        title="Generate new key">
+                                    <span class="dashicons dashicons-update" style="margin:6px 0 0 0;"></span>
+                                </button>
+                            </div>
+                            <p class="description">Auto-generated unique license key</p>
+                        </td>
+                    </tr>
+
+                    <!-- Customer Email -->
+                    <tr>
+                        <th scope="row">
+                            <label for="alm-customer-email">Customer Email <span style="color:#dc2626;">*</span></label>
+                        </th>
+                        <td>
+                            <input type="email" 
+                                   id="alm-customer-email" 
+                                   name="customeremail" 
+                                   required
+                                   class="regular-text"
+                                   pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
+                                   title="Please enter a valid email address">
+                            <p class="description">Customer's email address</p>
+                        </td>
+                    </tr>
+                    <!-- Activation Limit -->
+                    <tr>
+                        <th scope="row">
+                            <label for="alm-activation-limit">Activation Limit <span style="color:#dc2626;">*</span></label>
+                        </th>
+                        <td>
+                            <input type="number" 
+                                   id="alm-activation-limit" 
+                                   name="activationlimit" 
+                                   min="1" 
+                                   max="999"
+                                   value="1" 
+                                   required
+                                   class="small-text">
+                            <p class="description">Maximum number of sites that can use this license</p>
+                        </td>
+                    </tr>
+
+                    <!-- Expires -->
+                    <tr>
+                        <th scope="row">
+                            <label for="alm-expires">Expiry Date</label>
+                        </th>
+                        <td>
+                            <input type="date" 
+                                   id="alm-expires" 
+                                   name="expires"
+                                   min="<?php echo date('Y-m-d'); ?>"
+                                   placeholder="YYYY-MM-DD">
+                            <p class="description">Leave empty for lifetime license (never expires)</p>
+                        </td>
+                    </tr>
+                    <!-- Status -->
+                    <tr>
+                        <th scope="row">
+                            <label for="alm-status">Status <span style="color:#dc2626;">*</span></label>
+                        </th>
+                        <td>
+                            <select id="alm-status" name="status" required>
+                                <option value="active" selected>Active</option>
+                                <option value="inactive">Inactive</option>
+                                <option value="revoked">Revoked</option>
+                            </select>
+                            <p class="description">Initial license status</p>
+                        </td>
+                    </tr>
                 </tbody></table>
-                <p class="submit"><button type="submit" name="add_license" class="button button-primary">Add License</button></p>
+
+                <p class="submit">
+                    <button type="submit" name="addlicense" class="button button-primary">
+                        <span class="dashicons dashicons-plus-alt" style="margin:6px 5px 0 -3px;"></span>
+                        Add License
+                    </button>
+                </p>
             </form>
         </div>
     </div>
+
+    <script>
+    jQuery(document).ready(function($) {
+        // Copy to clipboard
+        $('#alm-copy-key-btn').click(function() {
+            var keyInput = $('#alm-license-key');
+            keyInput.select();
+            document.execCommand('copy');
+            
+            var btn = $(this);
+            var originalHtml = btn.html();
+            btn.html('<span class="dashicons dashicons-yes" style="color:#16a34a;margin:6px 0 0 0;"></span>');
+            
+            setTimeout(function() {
+                btn.html(originalHtml);
+            }, 2000);
+        });
+
+        // Regenerate key
+        $('#alm-regenerate-key-btn').click(function() {
+            if (!confirm('Generate a new license key? The current key will be replaced.')) {
+                return;
+            }
+            $.post(ajaxurl, {
+                action: 'alm_generate_new_key',
+                nonce: '<?php echo wp_create_nonce('alm_generate_key'); ?>'
+            }, function(response) {
+                if (response.success) {
+                    $('#alm-license-key').val(response.data.key);
+                    alert('✅ New key generated!');
+                } else {
+                    alert('❌ Failed to generate key. Please refresh the page.');
+                }
+            });
+        });
+    });
+    </script>
     <?php
 }
 
-function alm_render_edit_license_page(){
+
+/**
+ * =====================================================
+ * EDIT LICENSE FORM - ENHANCED
+ * =====================================================
+ */
+function alm_render_edit_license_page() {
     global $wpdb;
+    if (!isset($_GET['id'])) {
+        echo '<div class="wrap"><h1>Invalid License</h1></div>';
+        return;
+    }
+
+    $license_id = intval($_GET['id']);
     $license_table = $wpdb->prefix . 'alm_licenses';
     $activation_table = $wpdb->prefix . 'alm_license_activations';
-    $license_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
-    if (!$license_id) { echo '<div class="wrap alm-wrap"><h1>Invalid License ID</h1></div>'; return; }
+    $license = $wpdb->get_row(
+        $wpdb->prepare("SELECT * FROM $license_table WHERE id = %d", $license_id)
+    );
 
-    $license = $wpdb->get_row($wpdb->prepare("SELECT * FROM $license_table WHERE id = %d", $license_id));
-    if (!$license) { echo '<div class="wrap alm-wrap"><h1>License not found</h1></div>'; return; }
+    if (!$license) {
+        echo '<div class="wrap"><h1>License not found</h1></div>';
+        return;
+    }
+
+  
+
+    // Query untuk aktivasi, slot, dsb. (kode kamu sudah benar)
+    $activations = $wpdb->get_results($wpdb->prepare(
+        "SELECT id, license_id, site_url, activated_at 
+         FROM $activation_table 
+         WHERE license_id = %d 
+         ORDER BY activated_at DESC",
+        $license_id
+    ));
+
+    $current = $wpdb->get_var(
+        $wpdb->prepare(
+            "SELECT COUNT(*) FROM {$wpdb->prefix}alm_license_activations WHERE license_id = %d",
+            $license_id
+        )
+    );
+
+    $limit = (int) $license->activation_limit;
+    $slots = $wpdb->get_results(
+        $wpdb->prepare("SELECT * FROM {$wpdb->prefix}alm_license_activations WHERE license_id = %d", $license->id)
+    );
+
+   
+
     
-    $activations = $wpdb->get_results($wpdb->prepare("SELECT id, site_url, activated_at FROM $activation_table WHERE license_id = %d", $license_id));
     ?>
-    <div class="wrap alm-wrap">
-        <div class="alm-header">
-            <h1>Edit License #<?php echo esc_html($license->id); ?></h1>
-            <a href="?page=advanced-license-manager" class="button">Back to List</a>
+    <div class="wrap">
+        <h1 style="margin-bottom:20px;">Edit License</h1>
+        
+        <div style="display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:start;">
+            
+            <!-- LEFT COLUMN -->
+            <div>
+                <div style="background:#fff;padding:24px;border:1px solid #e5e7eb;border-radius:8px;">
+                    <form method="post" action="">
+                        <?php wp_nonce_field('alm_edit_nonce_' . $license->id); ?>
+                        <input type="hidden" name="license_id" value="<?php echo esc_attr($license->id); ?>">
+                        
+                        <h2 style="margin:0 0 20px;font-size:18px;font-weight:600;border-bottom:1px solid #e5e7eb;padding-bottom:12px;">
+                            License Information
+                        </h2>
+                        
+                        <table class="form-table">
+                            <tbody>
+                                <tr>
+                                    <th><label>License Key</label></th>
+                                    <td><input type="text" name="license_key" value="<?php echo esc_attr($license->license_key); ?>" class="regular-text" readonly style="background:#f9fafb;"></td>
+                                </tr>
+                                <tr>
+                                    <th><label for="product_name">Product Name</label></th>
+                                    <td><input type="text" id="product_name" name="product_name" value="<?php echo esc_attr($license->product_name); ?>" class="regular-text" required></td>
+                                </tr>
+                                <tr>
+                                    <th><label for="customer_email">Customer Email</label></th>
+                                    <td><input type="email" id="customer_email" name="customer_email" value="<?php echo esc_attr($license->customer_email); ?>" class="regular-text" required></td>
+                                </tr>
+                                <tr>
+                                    <th><label for="activation_limit">Activation Limit</label></th>
+                                    <td><input type="number" id="activation_limit" name="activation_limit" value="<?php echo esc_attr($license->activation_limit); ?>" min="1" required></td>
+                                </tr>
+                                <tr>
+                                    <th><label for="expires">Expires</label></th>
+                                    <td><input type="date" id="expires" name="expires" value="<?php echo !empty($license->expires) ? date('Y-m-d', strtotime($license->expires)) : ''; ?>"></td>
+                                </tr>
+                                <tr>
+                                    <th><label for="status">Status</label></th>
+                                    <td>
+                                        <select id="status" name="status" required>
+                                            <?php foreach (['active', 'inactive', 'expired', 'revoked'] as $status): ?>
+                                            <option value="<?php echo esc_attr($status); ?>" <?php selected($license->status, $status); ?>>
+                                                <?php echo ucfirst($status); ?>
+                                            </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <div id="revoked-warning" style="display:none;margin-top:10px;padding:12px;background:#fee2e2;border-left:4px solid #dc2626;">
+                                            <strong style="color:#dc2626;">⚠️ WARNING</strong>
+                                            <p style="margin:8px 0 0;color:#7f1d1d;font-size:13px;">Setting to "Revoked" is PERMANENT.</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        
+                        <div style="margin-top:20px;padding-top:20px;border-top:1px solid #e5e7eb;">
+                            <button type="submit" name="update_license" class="button button-primary">Save Changes</button>
+                            <a href="?page=advanced-license-manager" class="button">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- RIGHT COLUMN -->
+            <div>
+                <!-- Active Sites -->
+               <?php if (!empty($license)): ?>
+<div style="background:#fff;padding:20px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:20px;">
+    <h3 style="margin:0 0 16px;font-size:16px;border-bottom:1px solid #e5e7eb;padding-bottom:12px;">
+        Active Sites (<?php echo count($activations); ?>)
+    </h3>
+    <?php if (empty($activations)): ?>
+        <p style="text-align:center;color:#9ca3af;padding:20px 0;">No active sites</p>
+    <?php else: ?>
+        <?php foreach ($activations as $activation): ?>
+            <div style="padding:12px;border:1px solid #e5e7eb;border-radius:6px;margin-bottom:10px;background:#fafafa;">
+                <div style="font-weight:600;margin-bottom:8px;">
+                    🌐 <?php echo esc_html($activation->site_url); ?>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:12px;color:#6b7280;">
+                        📅 <?php echo date('d M Y', strtotime($activation->activated_at)); ?>
+                    </span>
+                    <button
+                        onclick="if(confirm('Remove?')) location.href='?page=alm-edit-license&id=<?php echo (int)$license->id; ?>&action=remote_deactivate&activation_id=<?php echo (int)$activation->id; ?>&_wpnonce=<?php echo wp_create_nonce('alm_remote_deactivate_' . $activation->id); ?>'"
+                        style="background:#fee2e2;color:#dc2626;border:none;padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer"
+                    >Remove</button>
+                </div>
+            </div>
+        <?php endforeach; ?>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
+
+                
+                <!-- Transfer Control -->
+                <div style="background:#fff;padding:20px;border:1px solid #e5e7eb;border-radius:8px;">
+                    <h3 style="margin:0 0 16px;font-size:16px;border-bottom:1px solid #e5e7eb;padding-bottom:12px;">Transfer Control</h3>
+                    <table style="width:100%;font-size:13px;">
+                        <tr><td>Count:</td><td style="text-align:right;"><strong><?php // $license_id sudah terdefinisi pada halaman edit tersebut
+                    $current = $wpdb->get_var(
+                      $wpdb->prepare(
+                        "SELECT COUNT(*) FROM {$wpdb->prefix}alm_license_activations WHERE license_id = %d",
+                        $license_id
+                      )
+                    );
+                    $limit = (int) $license->activation_limit;
+                    echo "<strong>{$current} / {$limit}</strong>";
+                     ?></td></tr>
+                                            <tr><td>Last:</td><td style="text-align:right;font-size:12px;"><?php echo (!empty($license->last_transfer_date) && $license->last_transfer_date != '0000-00-00 00:00:00') ? date('d M Y', strtotime($license->last_transfer_date)) : 'Never'; ?></td></tr>
+                                            <tr><td>Lock:</td><td style="text-align:right;"><?php echo ($license->domain_locked ?? 0) == 1 ? '🔒 Locked' : '✅ Unlocked'; ?></td></tr>
+                                        </table>
+                                    </div>
+                                    
+                    
+            </div>
+            
         </div>
         
-       <?php if (isset($_GET['update_success']) || isset($_GET['deactivate_success']) || isset($_GET['revoke_success'])) : ?>
-            <div class="notice notice-success is-dismissible"><p>Aksi berhasil dieksekusi.</p></div>
-        <?php endif; ?>
-
-        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
-            <div class="alm-card alm-card-content">
-                <form method="post">
-                    <input type="hidden" name="license_id" value="<?php echo esc_attr($license_id); ?>">
-                    <?php wp_nonce_field('alm_edit_nonce_' . $license_id); ?>
-                    <table class="form-table alm-form-table"><tbody>
-                        <tr><th scope="row"><label for="product_name">Product Name</label></th><td><input type="text" id="product_name" name="product_name" value="<?php echo esc_attr($license->product_name); ?>" required class="regular-text"></td></tr>
-                        <tr><th scope="row"><label for="license_key">License Key</label></th><td><input type="text" id="license_key" name="license_key" value="<?php echo esc_attr($license->license_key); ?>" required class="regular-text"></td></tr>
-                        <tr><th scope="row"><label for="customer_email">Customer Email</label></th><td><input type="email" id="customer_email" name="customer_email" value="<?php echo esc_attr($license->customer_email); ?>" class="regular-text"></td></tr>
-                        <tr><th scope="row"><label for="activation_limit">Activation Limit</label></th><td><input type="number" id="activation_limit" name="activation_limit" value="<?php echo esc_attr($license->activation_limit); ?>" min="0" class="small-text"></td></tr>
-                        <tr><th scope="row"><label for="expires">Expires</label></th><td><input type="date" id="expires" name="expires" value="<?php echo esc_attr($license->expires ? date('Y-m-d', strtotime($license->expires)) : ''); ?>"></td></tr>
-                        <tr>
-    <th scope="row"><label for="status">Status</label></th>
-    <td>
-        <select id="status" name="status">
-            <?php foreach (['active', 'inactive', 'expired', 'revoked'] as $status) {
-                echo '<option value="' . esc_attr($status) . '" ' . selected($license->status, $status, false) . '>' . ucfirst($status) . '</option>';
-            } ?>
-        </select>
-    </td>
-</tr>
-                    </tbody></table>
-                    <p class="submit"><button type="submit" name="update_license" class="button button-primary">Update License</button></p>
-                    
-                </form>
-                
-                <form method="post" style="display:inline;">
-                    <input type="hidden" name="revoke_license" value="1">
-                    <input type="hidden" name="license_id" value="<?php echo esc_attr($license_id); ?>">
-                    <?php wp_nonce_field('alm_revoke_license_' . $license_id); ?>
-                    
-                </form>
-            </div>
-            <div class="alm-card alm-card-content">
-                <h2 style="font-size: 16px; margin-top: 0; border-bottom: 1px solid var(--alm-border-color); padding-bottom: 12px;">Active Sites</h2>
-                <?php if (!empty($activations)) : ?>
-                    <ul style="margin: 0; padding: 0; list-style: none;">
-                        <?php foreach ($activations as $act) : ?>
-                            <li style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee;">
-                                <div>
-                                    <strong><?php echo esc_html($act->site_url); ?></strong><br>
-                                    <small>Activated: <?php echo date_i18n('j M Y', strtotime($act->activated_at)); ?></small>
-                                </div>
-                                <a href="<?php echo esc_url(wp_nonce_url('?page=alm-edit-license&id=' . $license_id . '&action=remote_deactivate&activation_id=' . $act->id, 'alm_remote_deactivate_' . $act->id)); ?>" class="button button-small button-link-delete" onclick="return confirm('Anda yakin ingin menonaktifkan situs ini?')">Deactivate</a>
-                            </li>
-                        <?php endforeach; ?>
-                    </ul>
-                <?php else : ?>
-                    <p>No sites have been activated with this license yet.</p>
+       <div style="display:flex;margin-top:38px;width:100%;">
+  <div class="alm-card alm-card-transfer" style="
+      background:#f9fafb;
+      border:1px solid #e5e7eb;
+      border-radius:16px;
+      box-shadow:0 2px 16px 0 rgba(30,41,59,.04);
+      padding:42px 28px 32px 28px;
+      max-width:860px;
+      min-width:340px;
+      width:100%;
+  ">
+    <h2 style="
+        font-size:17px;
+        color:#334155;
+        text-align:center;
+        margin-top:0;
+        margin-bottom:24px;
+        font-weight:700;
+        border-bottom:1px solid #e5e7eb;
+        padding-bottom:10px;
+        display:flex;
+        align-items:center;
+        gap:8px;
+        justify-content:center;
+    ">
+      <span style="font-size:23px;vertical-align:middle;">🔄</span>
+      Status Transfer Slot/Domain
+    </h2>
+    <?php if ($slots): ?>
+    <div style="overflow-x:auto;">
+        <table class="widefat" style="
+            min-width:520px;
+            width:98%;
+            table-layout:fixed;
+            font-size:14px;
+            background:#fff;
+            border-radius:8px;
+            margin:0 auto;
+            box-shadow:0 1px 4px 0 rgba(100,116,139,.07);
+        ">
+          <thead style="background:#f1f5f9;">
+            <tr>
+              <th style="width:28%;text-align:center;vertical-align:middle;">Domain</th>
+              <th style="width:12%;text-align:center;vertical-align:middle;">Dipakai</th>
+              <th style="width:14%;text-align:center;vertical-align:middle;">Sisa</th>
+              <th style="width:21%;text-align:center;vertical-align:middle;">Terakhir</th>
+              <th style="width:21%;text-align:center;vertical-align:middle;">Boleh Transfer Lagi</th>
+            </tr>
+          </thead>
+          <tbody>
+          <?php foreach ($slots as $slot):
+            $limit = 1;
+            $sisa = max(0, $limit - (int)$slot->transfer_count);
+            $next = !empty($slot->last_transfer_date)
+              ? date('d M Y', strtotime($slot->last_transfer_date . ' +1 year'))
+              : 'Bisa sekarang';
+          ?>
+            <tr>
+              <td style="
+                max-width:170px;
+                white-space:nowrap;
+                overflow:hidden;
+                text-overflow:ellipsis;
+                font-weight:500;
+                color:#334155;
+                text-align:center;
+                vertical-align:middle;
+                padding:9px 0;
+                ">
+                <?php echo esc_html($slot->site_url); ?>
+              </td>
+              <td style="text-align:center;vertical-align:middle;"><?php echo (int)$slot->transfer_count; ?>x</td>
+              <td style="text-align:center;vertical-align:middle;"><?php echo $sisa; ?></td>
+              <td style="text-align:center;vertical-align:middle;"><?php echo esc_html($slot->last_transfer_date); ?></td>
+              <td style="text-align:center;vertical-align:middle;">
+                <?php if ($next === 'Bisa sekarang'): ?>
+                    <span style="background:#dcfce7;color:#166534;padding:3px 11px;border-radius:7px;font-size:12px;">Bisa Sekarang</span>
+                <?php else: ?>
+                    <span style="background:#fee2e2;color:#dc2626;padding:3px 11px;border-radius:7px;font-size:12px;"><?php echo $next; ?></span>
                 <?php endif; ?>
-            </div>
-        </div>
-        <script>
-document.getElementById('status').addEventListener('change', function() {
-    if (this.value === 'revoked') {
-        if (!confirm('Mengubah status ke revoked akan menghapus SEMUA aktivasi domain untuk lisensi ini.\n\nLanjutkan?')) {
-            // Jika user klik Cancel, kembalikan ke status sebelumnya
-            this.value = '<?php echo esc_js($license->status); ?>';
-        }
-    }
-});
-</script>
+              </td>
+            </tr>
+          <?php endforeach ?>
+          </tbody>
+        </table>
     </div>
+    <?php else: ?>
+    <p style="color:#64748b;text-align:center;padding:27px 0;">
+      <span style="font-size:32px;opacity:.13;">🌐</span><br>
+      Belum ada slot/domain terdaftar.
+    </p>
+    <?php endif ?>
+  </div>
+</div>
+
+
+    </div>
+    
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const statusSelect = document.getElementById('status');
+        const warningDiv = document.getElementById('revoked-warning');
+        if (statusSelect && warningDiv) {
+            statusSelect.addEventListener('change', () => {
+                warningDiv.style.display = statusSelect.value === 'revoked' ? 'block' : 'none';
+            });
+            if (statusSelect.value === 'revoked') warningDiv.style.display = 'block';
+        }
+    });
+    </script>
     <?php
 }
+
+
+/**
+ * =====================================================
+ * AJAX HANDLER - Generate New Key
+ * =====================================================
+ */
+add_action('wp_ajax_alm_generate_new_key', function() {
+    check_ajax_referer('alm_generate_key', 'nonce');
+    
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('Permission denied');
+    }
+    
+    $generator = ALM_License_Generator::get_instance();
+    $new_key = $generator->generate_license_key();
+    
+    if ($new_key) {
+        wp_send_json_success(array('key' => $new_key));
+    } else {
+        wp_send_json_error('Failed to generate key');
+    }
+});
+
+
 
 function alm_render_activity_log_page() {
     global $wpdb;
@@ -2001,25 +2550,44 @@ function alm_render_email_settings_tab() {
         </form>
         
         <script>
-        // Preview email
-        document.getElementById('alm-preview-email-btn').onclick = function() {
-            var body = document.querySelector('[name="alm_email_body"]').value;
-            body = body.replace(/{user_name}/g, 'Andi')
-                       .replace(/{license_key}/g, 'LIC-1234-XXXX')
-                       .replace(/{expiry_date}/g, '2025-10-01')
-                       .replace(/{days_left}/g, '7')
-                       .replace(/{renewal_link}/g, 'https://aratheme.id/renew');
-            
-            var preview = document.getElementById('alm-preview-email');
-            preview.innerHTML = body;
-            preview.style.display = 'block';
-        };
-        
-        // Test email
-        document.getElementById('alm-test-email-btn').onclick = function() {
-            alert('Fitur kirim tes email perlu implementasi AJAX di backend.');
-        };
-        </script>
+// Preview email
+document.getElementById('alm-preview-email-btn').onclick = function() {
+    var body = document.querySelector('[name="alm_email_body"]').value;
+    body = body.replace(/{username}/g, 'Andi')
+               .replace(/{licensekey}/g, 'LIC-1234-XXXX')
+               .replace(/{expirydate}/g, '<?php echo date('d F Y', strtotime('+7 days')); ?>')
+               .replace(/{daysleft}/g, '7')
+               .replace(/{renewallink}/g, 'https://aratheme.id/renew');
+    
+    var preview = document.getElementById('alm-preview-email');
+    preview.innerHTML = body;
+    preview.style.display = 'block';
+};
+
+// Test email
+document.getElementById('alm-test-email-btn').onclick = function() {
+    if (!confirm('Send test email to admin: <?php echo get_option('admin_email'); ?>?')) {
+        return;
+    }
+    
+    this.disabled = true;
+    this.textContent = 'Sending...';
+    
+    jQuery.post(ajaxurl, {
+        action: 'alm_send_test_email',
+        nonce: '<?php echo wp_create_nonce('alm_test_email_nonce'); ?>'
+    }, function(response) {
+        if (response.success) {
+            alert('✅ ' + response.data);
+        } else {
+            alert('❌ ' + response.data);
+        }
+        document.getElementById('alm-test-email-btn').disabled = false;
+        document.getElementById('alm-test-email-btn').textContent = 'Kirim Tes Email ke Admin';
+    });
+};
+</script>
+
     </div>
     
     <style>

@@ -44,7 +44,7 @@ $recent_downloads = array_slice($downloads, 0, 3);
             <p class="dashboard-login">
                 <?php 
                 printf(
-                    __('Last login: %s', 'wc-customer-portal'), 
+                    __('Terakhir login: %s', 'wc-customer-portal'), 
                     date_i18n('d F Y, H:i', current_time('timestamp'))
                 ); 
                 ?>
@@ -52,7 +52,7 @@ $recent_downloads = array_slice($downloads, 0, 3);
             </p>
         </div>
         <div class="user-actions">
-            <a href="<?php echo esc_url(wc_get_account_endpoint_url('edit-account')); ?>" class="btn-icon" title="<?php _e('Settings', 'wc-customer-portal'); ?>">
+            <a href="<?php echo esc_url(wc_get_account_endpoint_url('edit-account')); ?>" class="btn-icon" title="<?php _e('Pengaturan', 'wc-customer-portal'); ?>">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/>
                     <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
@@ -70,15 +70,15 @@ $recent_downloads = array_slice($downloads, 0, 3);
             <line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
         <div class="alert-content">
-            <strong><?php _e('Action Required', 'wc-customer-portal'); ?></strong>
+            <strong><?php _e('Tindakan Diperlukan', 'wc-customer-portal'); ?></strong>
             <?php 
             printf(
-                __('You have %d expired license(s).', 'wc-customer-portal'), 
+                __('Anda memiliki %d lisensi kedaluwarsa.', 'wc-customer-portal'), 
                 $stats['expired']
             ); 
             ?>
             <a href="<?php echo esc_url(wc_get_account_endpoint_url('my-licenses')); ?>">
-                <?php _e('Renew Now', 'wc-customer-portal'); ?>
+                <?php _e('Perpanjang Sekarang', 'wc-customer-portal'); ?>
             </a>
         </div>
     </div>
@@ -235,8 +235,8 @@ $recent_downloads = array_slice($downloads, 0, 3);
                             <input type="text" value="<?php echo esc_attr($license['key']); ?>" readonly id="lic-prev-<?php echo $idx; ?>" style="position:absolute;left:-9999px;">
                         </div>
                         <div class="license-meta-row">
-                            <span><?php _e('Activations:', 'wc-customer-portal'); ?> <strong><?php echo esc_html($license['activations']); ?></strong></span>
-                            <span><?php _e('Expires:', 'wc-customer-portal'); ?> <strong><?php echo esc_html($license['expires']); ?></strong></span>
+                            <span><?php _e('Aktivasi:', 'wc-customer-portal'); ?> <strong><?php echo esc_html($license['activations']); ?></strong></span>
+                            <span><?php _e('Kadaluarsa:', 'wc-customer-portal'); ?> <strong><?php echo esc_html($license['expires']); ?></strong></span>
                         </div>
                     </div>
                     <?php endforeach; ?>
@@ -376,5 +376,36 @@ $recent_downloads = array_slice($downloads, 0, 3);
         </div>
         
     </div>
+    
+    <style>
+/* HILANGKAN GARIS BAWAH SEMUA BUTTON/LINK */
+a, .action-btn, .btn-view-all-licenses, .btn-download, .btn-edit-account, .view-all-link, .btn-primary-small {
+    text-decoration: none !important;
+}
+
+<style>
+/* Hilangkan garis bawah pada semua link & button */
+a, .action-btn, .btn-view-all-licenses, .btn-download, .btn-edit-account, .view-all-link, .btn-primary-small {
+    text-decoration: none !important;
+}
+
+/* Hover: tampilkan background abu terang, warna text tetap hitam, tanpa garis bawah */
+a:hover,
+.action-btn:hover,
+.btn-view-all-licenses:hover,
+.btn-download:hover,
+.btn-edit-account:hover,
+.view-all-link:hover,
+.btn-primary-small:hover {
+    text-decoration: none !important;
+    background: #f3f4f6 !important; /* abu terang */
+    color: #1f2937 !important;       /* hitam (Tailwind gray-800) */
+    border-color: inherit !important;
+    box-shadow: none !important;
+}
+</style>
+
+</style>
+
 
 </div>

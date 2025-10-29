@@ -6,7 +6,7 @@
 
 class Theme_License_Client {
     
-    private $server_url = 'https://server-lisensi.com'; // Ganti dengan URL server kamu
+    private $server_url = 'https://aratheme.id'; // Ganti dengan URL server kamu
     private $product_id = 'namatema'; // ID tema kamu
     
     /**

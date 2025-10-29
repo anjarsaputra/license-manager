@@ -336,18 +336,20 @@ function alm_notify_client_deactivation($site_url, $license_key, $product_name =
         'product_name' => $product_name,
         'deactivated_at' => current_time('mysql'),
         'server_time' => time(),
-        'message' => 'Your license has been deactivated from the license server',
+        'message' => 'Lisensi Anda telah dinonaktifkan dari server lisensi',
         'server_url' => home_url()
     );
     
     // Add signature for verification (optional but recommended)
-    $secret = get_option('alm_webhook_secret', wp_generate_password(32, false));
-    if (!get_option('alm_webhook_secret')) {
-        update_option('alm_webhook_secret', $secret);
-    }
+   // Ambil secret dari klien
+$secret = 'mediman_webhook_2760ee05bbac6c3a069d540ab3ed50c4';
+    error_log('SERVER SECRET: ' . $secret);
+
+
+$payload['signature'] = hash_hmac('sha256', json_encode($payload), $secret);
+
     
-    $payload['signature'] = hash_hmac('sha256', json_encode($payload), $secret);
-    
+
     error_log('Sending webhook payload: ' . json_encode($payload));
     
     // Send webhook with timeout
@@ -561,3 +563,65 @@ add_action('wp_ajax_alm_deactivate_site', 'alm_customer_deactivate_site', 10);
 
 // Log registration
 error_log('ALM Customer Portal: Secure AJAX handler with webhook registered (v1.4.0)');
+
+
+
+add_action('wp_ajax_alm_transfer_site', 'alm_handle_transfer_site');
+add_action('wp_ajax_nopriv_alm_transfer_site', 'alm_handle_transfer_site');
+
+function alm_handle_transfer_site() {
+    check_ajax_referer('alm_license_action', 'nonce');
+    $license_key = sanitize_text_field($_POST['license_key']);
+    $site_id = intval($_POST['site_id']);
+    $old_site_url = sanitize_text_field($_POST['old_site_url']);
+    $new_site_url = sanitize_text_field($_POST['new_site_url']);
+
+    global $wpdb;
+    $table = $wpdb->prefix . 'alm_license_activations';
+
+    // Validasi: cek limit/cooldown di sini jika perlu...
+
+// Cek limit transfer per tahun
+$row = $wpdb->get_row($wpdb->prepare(
+    "SELECT transfer_count, last_transfer_date FROM $table WHERE id = %d", $site_id
+));
+
+if ($row) {
+    $current_year = date('Y');
+    $last_transfer = $row->last_transfer_date;
+    $transfer_this_year = 0;
+    if ($last_transfer && substr($last_transfer, 0, 4) == $current_year) {
+        $transfer_this_year = 1;
+    }
+    $transfer_limit = 1; // 1 per tahun
+    if ($transfer_this_year >= $transfer_limit) {
+        wp_send_json_error(array(
+            'message' => 'Limit transfer slot untuk tahun ini sudah habis. Silakan tunggu sampai tahun depan.'
+        ));
+    }
+}
+
+
+
+    // Cara cepat/aman
+    $current_transfer = $wpdb->get_var($wpdb->prepare(
+        "SELECT transfer_count FROM $table WHERE id = %d", $site_id
+    ));
+    $new_transfer = $current_transfer !== null ? intval($current_transfer) + 1 : 1;
+
+    $updated = $wpdb->update(
+        $table,
+        array(
+            'site_url' => $new_site_url,
+            'transfer_count' => $new_transfer,
+            'last_transfer_date' => current_time('mysql'),
+        ),
+        array('id' => $site_id)
+    );
+
+    if ($updated !== false) {
+        wp_send_json_success(array('message' => 'Transfer berhasil!'));
+    } else {
+        wp_send_json_error(array('message' => 'Gagal update data slot di database.'));
+    }
+}

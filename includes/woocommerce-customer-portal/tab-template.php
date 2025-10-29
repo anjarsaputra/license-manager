@@ -16,10 +16,25 @@ $customer_id = get_current_user_id();
 $current_user = wp_get_current_user();
 $user_email = $current_user->user_email;
 $user_name = $current_user->display_name;
-
 // Get licenses using Helper
 $licenses = WCP_Portal_Helpers::get_customer_licenses($customer_id);
 $stats = WCP_Portal_Helpers::get_license_stats($customer_id);
+
+// ✅ FIX: Calculate actual spending from WooCommerce orders
+$customer_spending = 0;
+$customer_orders_list = wc_get_orders(array(
+    'customer_id' => $customer_id,
+    'status'      => array('wc-completed', 'wc-processing'),
+    'limit'       => -1
+));
+
+foreach ($customer_orders_list as $order) {
+    $customer_spending += $order->get_total();
+}
+
+// Override spent stat with actual value
+$stats['spent'] = number_format($customer_spending, 0, ',', '.');
+
 
 // Check if user has orders with license products
 global $wpdb;
@@ -101,12 +116,15 @@ unset($license);
             </svg>
         </div>
         <div>
-            <div class="alm-stat-number"><?php echo isset($stats['spent']) ? 'Rp' . $stats['spent'] : 'Rp0'; ?></div>
+            <div class="alm-stat-number">Rp<?php echo $stats['spent']; ?></div>
+
             <div class="alm-stat-label-main"><?php _e('Yang dibelanjakan', 'alm'); ?></div>
             <div class="alm-stat-label-desc">Selamanya</div>
         </div>
     </div>
 </div>
+
+<div class="p-3"></div>
 
 
     <?php if (empty($licenses)) : ?>
@@ -322,21 +340,41 @@ unset($license);
                                         </span>
                                         <?php endif; ?>
                                     </div>
-                                    <?php if ($site_id > 0) : ?>
-                                    <button 
-    type="button" 
-    class="alm-deactivate-btn" 
-    data-license-key="<?php echo esc_attr($license_key); ?>"
-    data-site-id="<?php echo esc_attr($site_id); ?>"
-    data-site-url="<?php echo esc_attr($site_url); ?>"
->
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="18" y1="6" x2="6" y2="18"/>
-        <line x1="6" y1="6" x2="18" y2="18"/>
-    </svg>
-    <?php _e('Deactivate', 'alm'); ?>
-</button>
-                                    <?php endif; ?>
+                                   <?php if ($site_id > 0) : ?>
+    <div class="alm-site-actions">
+        <button 
+            type="button" 
+            class="alm-deactivate-btn" 
+            data-license-key="<?php echo esc_attr($license_key); ?>"
+            data-site-id="<?php echo esc_attr($site_id); ?>"
+            data-site-url="<?php echo esc_attr($site_url); ?>"
+        >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+            <?php _e('Deactivate', 'alm'); ?>
+        </button>
+        
+        <button 
+            type="button"
+            class="alm-transfer-btn"
+            data-license-key="<?php echo esc_attr($license_key); ?>"
+            data-site-id="<?php echo esc_attr($site_id); ?>"
+            data-site-url="<?php echo esc_attr($site_url); ?>"
+        >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <!-- Modern swap icon: two arrows in loop -->
+                <path d="M17 21l4-4-4-4" />
+                <path d="M7 3l-4 4 4 4" />
+                <path d="M3 7h13a5 5 0 0 1 5 5v4" />
+                <path d="M21 17H8a5 5 0 0 1-5-5V7" />
+            </svg>
+            <?php _e('Transfer', 'alm'); ?>
+        </button>
+    </div>
+<?php endif; ?>
+
                                 </li>
                             <?php endforeach; ?>
                         </ul>
@@ -396,12 +434,52 @@ unset($license);
 </div>
 
 <style>
+
+.alm-site-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+.alm-site-actions .alm-deactivate-btn,
+.alm-site-actions .alm-transfer-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    font-size: 1rem;
+    border-radius: 7px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    transition: box-shadow 0.16s, border-color 0.16s;
+}
+.alm-site-actions .alm-deactivate-btn svg,
+.alm-site-actions .alm-transfer-btn svg {
+    margin-right: 4px;
+    /* No background, just modern icon*/
+}
+.alm-site-actions .alm-transfer-btn {
+    color: #3b82f6;
+    border-color: #c7d6ee;
+}
+.alm-site-actions .alm-deactivate-btn {
+    color: #ef4444;
+    border-color: #f3cdcd;
+}
+.alm-site-actions .alm-transfer-btn:hover {
+    background: #e8f0fb;
+}
+.alm-site-actions .alm-deactivate-btn:hover {
+    background: #fbeaea;
+}
+
     
 .alm-licenses-stats-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 24px;
     width: 100%;
+    margin-bottom: 32px;
 }
 .alm-stat-card {
     background: #fff;
@@ -473,6 +551,44 @@ unset($license);
 
 <script>
 jQuery(document).ready(function($) {
+    
+    $('.alm-transfer-btn').on('click', function() {
+        var $btn = $(this);
+        var licenseKey = $btn.data('license-key');
+        var siteId = $btn.data('site-id');
+        var siteUrl = $btn.data('site-url');
+
+        var newDomain = prompt('Masukkan domain/site URL baru untuk transfer slot ini:', '');
+        if (!newDomain) return;
+
+        $btn.prop('disabled', true).text('Transferring...');
+
+        $.ajax({
+            url: '<?php echo admin_url('admin-ajax.php'); ?>',
+            type: 'POST',
+            data: {
+                action: 'alm_transfer_site',
+                license_key: licenseKey,
+                site_id: siteId,
+                old_site_url: siteUrl,
+                new_site_url: newDomain,
+                nonce: '<?php echo wp_create_nonce('alm_license_action'); ?>'
+            },
+            success: function(response) {
+                if (response && response.success) {
+                    alert(response.data && response.data.message ? response.data.message : 'Transfer berhasil!');
+                    location.reload();
+                } else {
+                    alert(response.data && response.data.message ? response.data.message : 'Gagal transfer.');
+                    $btn.prop('disabled', false).text('Transfer');
+                }
+            },
+            error: function() {
+                alert('Connection error. Please try again.');
+                $btn.prop('disabled', false).text('Transfer');
+            }
+        });
+    });
     
     // Copy license key
     $('.alm-copy-btn').on('click', function() {
@@ -581,4 +697,7 @@ jQuery(document).ready(function($) {
     });
     
 });
+
+
+
 </script>

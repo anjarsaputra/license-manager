@@ -162,15 +162,16 @@ class WCP_Portal_Orders {
                 <div class="wc-order-card-body">
                     <div class="wc-order-summary">
                         <span class="wc-order-total"><?php echo $order->get_formatted_order_total(); ?></span>
-                        <span class="wc-order-items"><?php echo $order->get_item_count(); ?> item(s)</span>
+                        <span class="wc-order-items"><?php echo $order->get_item_count(); ?> produk</span>
+
                     </div>
 
                     <div class="wc-order-actions">
                         <?php foreach ($actions as $key => $action) :
                             $icons = [
-                                'pay'     => '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m7-7H5"/></svg>',
-                                'view'    => '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M2.05 12a9.94 9.94 0 0 1 19.9 0 9.94 9.94 0 0 1-19.9 0z"/></svg>',
-                                'cancel'  => '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+                                'bayar'     => '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m7-7H5"/></svg>',
+                                'lihat'    => '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M2.05 12a9.94 9.94 0 0 1 19.9 0 9.94 9.94 0 0 1-19.9 0z"/></svg>',
+                                'batal'  => '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
                                 'invoice' => '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="20" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/></svg>',
                             ];
                             $class = $key;
@@ -183,11 +184,12 @@ class WCP_Portal_Orders {
                 </div>
 
                 <div class="wc-order-details-expand">
-                    <p><strong>Order ID:</strong> <?php echo $order_id; ?></p>
+                    <p><strong>ID Pesanan:</strong> <?php echo $order_id; ?></p>
                     <p><strong>Status:</strong> <?php echo esc_html(wc_get_order_status_name($order_status)); ?></p>
                     <p><strong>Total:</strong> <?php echo $order->get_formatted_order_total(); ?></p>
-                    <p><strong>Payment Method:</strong> <?php echo esc_html($order->get_payment_method_title()); ?></p>
+                    <p><strong>Metode Pembayaran:</strong> <?php echo esc_html($order->get_payment_method_title()); ?></p>
                 </div>
+
             </div>
             <?php endforeach; ?>
         </div>
@@ -285,7 +287,7 @@ class WCP_Portal_Orders {
         if (empty($licenses)) return;
         ?>
         <section class="wcp-order-licenses">
-            <h2><?php _e('License Keys', 'wc-customer-portal'); ?></h2>
+            <h2>Kunci Lisensi</h2>
             <div class="order-licenses-grid">
                 <?php foreach ($licenses as $license) : ?>
                     <div class="order-license-item">
@@ -293,11 +295,13 @@ class WCP_Portal_Orders {
                         <div class="license-key-display"><code><?php echo esc_html($license['key']); ?></code></div>
                         <div class="license-status-display">
                             <span class="license-status status-<?php echo esc_attr($license['status']); ?>">
-                                <?php echo esc_html(ucfirst($license['status'])); ?>
-                            </span>
+    <?php echo esc_html($status); ?>
+</span>
+
                             <span class="license-expires">
-                                <?php printf(__('Expires: %s', 'wc-customer-portal'), esc_html($license['expires'])); ?>
-                            </span>
+    <?php printf('Kadaluarsa: %s', esc_html($license['expires'])); ?>
+</span>
+
                         </div>
                     </div>
                 <?php endforeach; ?>
@@ -327,11 +331,15 @@ class WCP_Portal_Orders {
                 $order_id
             ));
             foreach ($results as $license) {
-                $status = match ($license->status) {
-                    3 => 'expired',
-                    4 => 'disabled',
-                    default => 'active'
-                };
+                if ($license->status == 3) {
+    $status = 'Kadaluwarsa';
+} elseif ($license->status == 4) {
+    $status = 'Dinonaktifkan';
+} else {
+    $status = 'Aktif';
+}
+
+
                 $expires = $license->expires_at ? date('d M Y', strtotime($license->expires_at)) : 'Lifetime';
                 $licenses[] = [
                     'id'      => $license->id,

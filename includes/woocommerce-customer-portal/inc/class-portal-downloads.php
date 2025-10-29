@@ -39,8 +39,9 @@ class WCP_Portal_Downloads {
         ?>
         <div class="wcp-downloads-page">
             <div class="downloads-header">
-                <h2><?php _e('Your Downloads', 'wc-customer-portal'); ?></h2>
-                <p><?php _e('Access your purchased files easily from here.', 'wc-customer-portal'); ?></p>
+                <h2>Unduhan Anda</h2>
+<p>Akses semua file yang sudah Anda beli langsung di halaman ini.</p>
+
             </div>
 
             <div class="downloads-grid">
@@ -58,15 +59,15 @@ class WCP_Portal_Downloads {
 
                     <div class="download-meta">
                         <?php if (!empty($download['downloads_remaining'])) : ?>
-                        <p><strong><?php _e('Downloads:', 'wc-customer-portal'); ?></strong> 
-                            <?php echo $download['downloads_remaining'] === '' ? __('Unlimited', 'wc-customer-portal') : esc_html($download['downloads_remaining']); ?>
-                        </p>
+                        <p><strong>Jumlah Unduhan:</strong>
+    <?php echo $download['downloads_remaining'] === '' ? 'Tak terbatas' : esc_html($download['downloads_remaining']); ?>
+</p>
                         <?php endif; ?>
 
                         <?php if (!empty($download['access_expires'])) : ?>
-                        <p><strong><?php _e('Expires:', 'wc-customer-portal'); ?></strong> 
-                            <?php echo $download['access_expires'] === 'Never' ? __('Never', 'wc-customer-portal') : esc_html(date_i18n(get_option('date_format'), strtotime($download['access_expires']))); ?>
-                        </p>
+                        <p><strong>Kedaluwarsa:</strong>
+    <?php echo $download['access_expires'] === 'Never' ? 'Tidak pernah' : esc_html(date_i18n(get_option('date_format'), strtotime($download['access_expires']))); ?>
+</p>
                         <?php endif; ?>
                     </div>
 
@@ -82,8 +83,8 @@ class WCP_Portal_Downloads {
 
                         <?php if (!empty($download['order_id'])) : ?>
                         <a href="<?php echo esc_url(wc_get_endpoint_url('view-order', $download['order_id'], wc_get_page_permalink('myaccount'))); ?>" class="btn-secondary">
-                            <?php _e('View Order', 'wc-customer-portal'); ?>
-                        </a>
+    Lihat Pesanan
+</a>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -95,6 +96,26 @@ class WCP_Portal_Downloads {
         .wcp-downloads-page {
             margin-top: 10px;
         }
+        
+        .btn-primary,
+.btn-secondary,
+a.btn-primary,
+a.btn-secondary,
+.btn-primary:hover,
+.btn-secondary:hover,
+a.btn-primary:hover,
+a.btn-secondary:hover,
+.btn-primary:focus,
+.btn-secondary:focus,
+a.btn-primary:focus,
+a.btn-secondary:focus,
+.btn-primary:active,
+.btn-secondary:active,
+a.btn-primary:active,
+a.btn-secondary:active {
+    text-decoration: none !important;
+}
+
         .downloads-header h2 {
             font-size: 1.6rem;
             font-weight: 800;
@@ -224,11 +245,12 @@ class WCP_Portal_Downloads {
     </svg>
 </div>
 
-        <h3><?php _e('Tidak Ada Unduhan yang Tersedia', 'wc-customer-portal'); ?></h3>
-        <p><?php _e('Sepertinya Anda belum membeli produk yang dapat diunduh, atau pesanan Anda masih diproses.', 'wc-customer-portal'); ?></p>
-        <a href="<?php echo esc_url(get_permalink(wc_get_page_id('shop'))); ?>" class="btn-primary">
-            <?php _e('Beli Produk', 'wc-customer-portal'); ?>
-        </a>
+        <h3>Tidak Ada Unduhan Tersedia</h3>
+<p>Anda belum membeli produk digital atau pesanan Anda masih dalam proses. Silakan shop untuk membeli produk download.</p>
+<a href="<?php echo esc_url(get_permalink(wc_get_page_id('shop'))); ?>" class="btn-primary">
+    Beli Produk
+</a>
+
     </div>
 </div>
 
@@ -245,6 +267,8 @@ class WCP_Portal_Downloads {
     justify-content: center;
     margin-top: 12px;
 }
+
+
 
 .empty-card {
     text-align: center;
@@ -305,6 +329,8 @@ class WCP_Portal_Downloads {
     background: #1d4ed8;
     box-shadow: 0 3px 10px rgba(37,99,235,0.25);
 }
+
+
 
 @media (max-width: 768px) {
     .wcp-downloads-empty {

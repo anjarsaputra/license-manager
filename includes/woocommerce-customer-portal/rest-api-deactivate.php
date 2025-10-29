@@ -192,6 +192,38 @@ function alm_rest_deactivate_site($request) {
         );
     }
     
+    // === Kirim webhook ke klien ===
+$webhook_url = rtrim($site_url, '/').'/wp-json/alm/v1/license-deactivated';
+$webhook_secret = 'mediman_webhook_2760ee05bbac6c3a069d540ab3ed50c4';
+
+// Payload WAJIB urut dan sama dengan ekspektasi klien!
+$payload = [
+    'action'        => 'license_deactivated',
+    'license_key'   => $license_key,
+    'site_url'      => $site_url,
+    'deactivated_at'=> gmdate('Y-m-d H:i:s'),
+    'product_name'  => $license->product_name ?? 'Mediman',
+    'server_url'    => home_url(),
+    'server_time'   => time(),
+    'message'       => 'Dinonaktifkan dari user portal Akun'
+];
+
+// Signature HMAC
+error_log('SERVER SECRET: ' . $webhook_secret);
+$signature = hash_hmac('sha256', json_encode($payload), $webhook_secret);
+$payload['signature'] = $signature;
+
+// Kirim POST pakai wp_remote_post agar tetap di WordPress:
+$response = wp_remote_post($webhook_url, [
+    'method'    => 'POST',
+    'body'      => json_encode($payload),
+    'headers'   => [
+        'Content-Type' => 'application/json',
+    ],
+    'timeout'   => 10,
+    'data_format' => 'body'
+]);
+    
     error_log('SUCCESS: Activation deleted from database');
     
     // ========================================

@@ -6,7 +6,7 @@
  * 
  * @package License Manager
  * @version 1.0.0
- * @author anjarsaputra
+ * @author aradev
  * @since 2025-10-02
  */
 

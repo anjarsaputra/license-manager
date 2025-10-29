@@ -54,10 +54,9 @@ function wcp_load_files() {
         'class-portal-assets.php',       // CSS/JS loading
         'class-portal-navigation.php',   // Menu customization
         'class-portal-dashboard.php',    // Dashboard page
-            'class-portal-orders.php',      // Custom order cards
-    'class-portal-downloads.php',   // Custom downloads UI
-    'class-portal-address.php',     // 🆕 Modern address & edit form
-
+        'class-portal-orders.php',       // Custom order cards
+        'class-portal-downloads.php',    // Custom downloads UI
+        'class-portal-address.php',      // 🆕 Modern address & edit form
     ];
     
     foreach ($core_files as $file) {
@@ -103,17 +102,16 @@ function wcp_load_files() {
     }
     
     if (class_exists('WCP_Portal_Orders')) {
-    WCP_Portal_Orders::instance();
-}
-
-if (class_exists('WCP_Portal_Downloads')) {
-    WCP_Portal_Downloads::instance();
-}
-
-if (class_exists('WCP_Portal_Address')) {
-    WCP_Portal_Address::instance();
-}
-
+        WCP_Portal_Orders::instance();
+    }
+    
+    if (class_exists('WCP_Portal_Downloads')) {
+        WCP_Portal_Downloads::instance();
+    }
+    
+    if (class_exists('WCP_Portal_Address')) {
+        WCP_Portal_Address::instance();
+    }
 }
 add_action('plugins_loaded', 'wcp_load_files', 20);
 
@@ -130,4 +128,90 @@ register_activation_hook(__FILE__, function() {
  */
 register_deactivation_hook(__FILE__, function() {
     flush_rewrite_rules();
+});
+
+/**
+ * === CUSTOM CARD FOR EDIT ADDRESS ===
+ */
+
+// Card custom untuk halaman edit Billing Address
+add_action('woocommerce_before_edit_address_form_billing', function() {
+    ?>
+    <div class="wcp-edit-address-card">
+        <h2>
+            <span style="font-size:2rem;vertical-align:-5px;">🏠</span>
+            Alamat Tagihan
+        </h2>
+        <p class="wcp-edit-address-desc">
+            Silakan isi atau ubah data alamat tagihan Anda. Data ini digunakan untuk tagihan pesanan.
+        </p>
+    </div>
+    <style>
+    .wcp-edit-address-card {
+        background: linear-gradient(90deg,#f8fafc 0%, #f1f5f9 100%);
+        border-radius: 18px;
+        box-shadow: 0 2px 16px rgba(59,130,246,0.06);
+        padding: 30px 34px;
+        margin-bottom: 28px;
+        margin-top: 7px;
+        max-width: 640px;
+    }
+    .wcp-edit-address-card h2 {
+        font-size: 1.7rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+        color: #2563eb;
+    }
+    .wcp-edit-address-desc {
+        color: #64748b;
+        font-size: 1.1rem;
+        margin-bottom: 0;
+    }
+    @media (max-width: 500px) {
+        .wcp-edit-address-card { padding: 18px 10px; }
+        .wcp-edit-address-card h2 { font-size:1.2rem;}
+    }
+    </style>
+    <?php
+});
+
+// Card custom untuk halaman edit Shipping Address
+add_action('woocommerce_before_edit_address_form_shipping', function() {
+    ?>
+    <div class="wcp-edit-address-card">
+        <h2>
+            <span style="font-size:2rem;vertical-align:-5px;">📦</span>
+            Alamat Pengiriman
+        </h2>
+        <p class="wcp-edit-address-desc">
+            Silakan isi atau ubah data alamat pengiriman Anda. Data ini digunakan untuk pengiriman pesanan.
+        </p>
+    </div>
+    <style>
+    .wcp-edit-address-card {
+        background: linear-gradient(90deg,#e0e7ff 0%, #f1f5f9 100%);
+        border-radius: 18px;
+        box-shadow: 0 2px 16px rgba(59,130,246,0.06);
+        padding: 30px 34px;
+        margin-bottom: 28px;
+        margin-top: 7px;
+        max-width: 640px;
+    }
+    .wcp-edit-address-card h2 {
+        font-size: 1.7rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+        color: #312e81;
+    }
+    .wcp-edit-address-desc {
+        color: #64748b;
+        font-size: 1.1rem;
+        margin-bottom: 0;
+    }
+    @media (max-width: 500px) {
+        .wcp-edit-address-card { padding: 18px 10px; }
+        .wcp-edit-address-card h2 { font-size:1.2rem;}
+    }
+    </style>
+    <?php
 });

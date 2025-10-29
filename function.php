@@ -1,143 +1,96 @@
 <?php
 /**
  * File untuk fungsi-fungsi umum Plugin License Manager.
- * Version: 9.1 - Security Enhanced
- * Last Updated: 2025-10-02
+ * Version: 9.2 - Production Ready (Debug Disabled)
+ * Last Updated: 2025-10-24
  */
 
 // Exit if accessed directly.
-if ( ! defined('ABSPATH') ) {
-    exit;
-}
-
-
-//require_once plugin_dir_path(__FILE__) . 'includes/woocommerce-customer-portal/inc/custom-myaccount/init.php';
-
-/**
- * DEBUG: Check Activation Table Structure
- * Visit: /?check_activation_table=1
- */
-add_action('init', function() {
-    if (!isset($_GET['check_activation_table']) || !current_user_can('manage_options')) {
-        return;
-    }
-    
-    global $wpdb;
-    $table = $wpdb->prefix . 'alm_license_activations';
-    
-    echo '<pre style="background:#000;color:#0f0;padding:20px;font-family:monospace;">';
-    echo "=== ACTIVATION TABLE STRUCTURE ===\n\n";
-    
-    // Check if table exists
-    if ($wpdb->get_var("SHOW TABLES LIKE '{$table}'") != $table) {
-        echo "❌ Table NOT FOUND: {$table}\n";
-        echo '</pre>';
-        exit;
-    }
-    
-    echo "✓ Table: {$table}\n\n";
-    
-    // Show columns
-    $columns = $wpdb->get_results("DESCRIBE {$table}");
-    
-    echo "Columns:\n";
-    foreach ($columns as $col) {
-        echo "  - {$col->Field} ({$col->Type})\n";
-    }
-    
-    echo "\n";
-    
-    // Show sample data
-    echo "Sample Activation Data:\n";
-    $sample = $wpdb->get_row("SELECT * FROM {$table} LIMIT 1");
-    
-    if ($sample) {
-        foreach ($sample as $key => $value) {
-            echo "  {$key}: {$value}\n";
-        }
-    } else {
-        echo "  No data found\n";
-    }
-    
-    // Count total
-    $total = $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
-    echo "\nTotal activations: {$total}\n";
-    
-    echo '</pre>';
-    exit;
-});
-
-
-/**
- * Custom Functions - Load Customer Portal
- */
-
 if (!defined('ABSPATH')) {
     exit;
 }
 
+/**
+ * =====================================================
+ * DEBUG FUNCTIONS - RESTRICTED FOR PRODUCTION
+ * =====================================================
+ */
 
 /**
- * DEBUG: Show ALM Table Structure
- * Visit: /?check_alm_table=1
+ * PRODUCTION: Debug hanya untuk super admin dengan query string
  */
 add_action('init', function() {
-    if (!isset($_GET['check_alm_table']) || !current_user_can('manage_options')) {
+    // ✅ PRODUCTION: Require admin + explicit query string
+    if (!current_user_can('manage_options') || !isset($_GET['alm_debug'])) {
         return;
     }
     
-    global $wpdb;
-    $table = $wpdb->prefix . 'alm_licenses';
-    
-    echo '<pre style="background:#000;color:#0f0;padding:20px;font-family:monospace;">';
-    echo "=== ALM LICENSE TABLE STRUCTURE ===\n\n";
-    
-    // Show columns
-    $columns = $wpdb->get_results("DESCRIBE {$table}");
-    
-    echo "Table: {$table}\n\n";
-    echo "Columns:\n";
-    foreach ($columns as $col) {
-        echo "  - {$col->Field} ({$col->Type})\n";
-    }
-    
-    echo "\n";
-    
-    // Show sample data
-    echo "Sample License Data:\n";
-    $sample = $wpdb->get_row("SELECT * FROM {$table} LIMIT 1");
-    
-    if ($sample) {
-        foreach ($sample as $key => $value) {
-            echo "  {$key}: {$value}\n";
+    // Check activation table
+    if (isset($_GET['check_activation_table'])) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'alm_license_activations';
+        
+        echo '<pre style="background:#000;color:#0f0;padding:20px;font-family:monospace;">';
+        echo "=== ACTIVATION TABLE STRUCTURE ===\n\n";
+        
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$table}'") != $table) {
+            echo "❌ Table NOT FOUND: {$table}\n";
+            echo '</pre>';
+            exit;
         }
-    } else {
-        echo "  No data found\n";
+        
+        echo "✓ Table: {$table}\n\n";
+        
+        $columns = $wpdb->get_results("DESCRIBE {$table}");
+        echo "Columns:\n";
+        foreach ($columns as $col) {
+            echo "  - {$col->Field} ({$col->Type})\n";
+        }
+        
+        echo "\nTotal activations: " . $wpdb->get_var("SELECT COUNT(*) FROM {$table}") . "\n";
+        echo '</pre>';
+        exit;
     }
     
-    // Count total
-    $total = $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
-    echo "\nTotal licenses: {$total}\n";
-    
-    echo '</pre>';
-    exit;
+    // Check license table
+    if (isset($_GET['check_alm_table'])) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'alm_licenses';
+        
+        echo '<pre style="background:#000;color:#0f0;padding:20px;font-family:monospace;">';
+        echo "=== ALM LICENSE TABLE STRUCTURE ===\n\n";
+        
+        $columns = $wpdb->get_results("DESCRIBE {$table}");
+        echo "Table: {$table}\n\nColumns:\n";
+        foreach ($columns as $col) {
+            echo "  - {$col->Field} ({$col->Type})\n";
+        }
+        
+        echo "\nTotal licenses: " . $wpdb->get_var("SELECT COUNT(*) FROM {$table}") . "\n";
+        echo '</pre>';
+        exit;
+    }
 });
 
-// Define ALL constants yang dibutuhkan
-define('WCP_VERSION', '2.0.0');
-define('WCP_PLUGIN_DIR', plugin_dir_path(__FILE__) . 'includes/woocommerce-customer-portal/');
-define('WCP_PLUGIN_URL', plugin_dir_url(__FILE__) . 'includes/woocommerce-customer-portal/');
-define('WCP_BASE_DIR', WCP_PLUGIN_DIR);
-define('WCP_INC_DIR', WCP_PLUGIN_DIR . 'inc/');
-define('WCP_ASSETS_URL', WCP_PLUGIN_URL . 'assets/');
-define('WCP_TEMPLATES_DIR', WCP_PLUGIN_DIR . 'templates/');
+/**
+ * =====================================================
+ * CUSTOMER PORTAL SETUP
+ * =====================================================
+ */
+
+// Define constants
+if (!defined('WCP_VERSION')) define('WCP_VERSION', '2.0.0');
+if (!defined('WCP_PLUGIN_DIR')) define('WCP_PLUGIN_DIR', plugin_dir_path(__FILE__) . 'includes/woocommerce-customer-portal/');
+if (!defined('WCP_PLUGIN_URL')) define('WCP_PLUGIN_URL', plugin_dir_url(__FILE__) . 'includes/woocommerce-customer-portal/');
+if (!defined('WCP_BASE_DIR')) define('WCP_BASE_DIR', WCP_PLUGIN_DIR);
+if (!defined('WCP_INC_DIR')) define('WCP_INC_DIR', WCP_PLUGIN_DIR . 'inc/');
+if (!defined('WCP_ASSETS_URL')) define('WCP_ASSETS_URL', WCP_PLUGIN_URL . 'assets/');
+if (!defined('WCP_TEMPLATES_DIR')) define('WCP_TEMPLATES_DIR', WCP_PLUGIN_DIR . 'templates/');
 
 /**
- * Load all portal files
+ * Load portal files
  */
 function load_customer_portal_files() {
-    
-    // Check if files exist before requiring
     $files = [
         'class-portal-helpers.php',
         'class-portal-assets.php',
@@ -152,37 +105,16 @@ function load_customer_portal_files() {
         $file_path = WCP_INC_DIR . $file;
         if (file_exists($file_path)) {
             require_once $file_path;
-        } else {
-            error_log('WCP: Missing file - ' . $file);
         }
     }
     
-    // Initialize (only if classes exist)
-    if (class_exists('WCP_Portal_Init')) {
-        WCP_Portal_Init::instance();
-    }
-    
-    if (class_exists('WCP_Portal_Assets')) {
-        WCP_Portal_Assets::instance();
-    }
-    
-    if (class_exists('WCP_Portal_Navigation')) {
-        WCP_Portal_Navigation::instance();
-    }
-    
-    if (class_exists('WCP_Portal_Dashboard')) {
-        WCP_Portal_Dashboard::instance();
-    }
-    
-    
-    
-    if (class_exists('WCP_Portal_Orders')) {
-        WCP_Portal_Orders::instance();
-    }
-    
-    if (class_exists('WCP_Portal_Downloads')) {
-        WCP_Portal_Downloads::instance();
-    }
+    // Initialize classes
+    if (class_exists('WCP_Portal_Init')) WCP_Portal_Init::instance();
+    if (class_exists('WCP_Portal_Assets')) WCP_Portal_Assets::instance();
+    if (class_exists('WCP_Portal_Navigation')) WCP_Portal_Navigation::instance();
+    if (class_exists('WCP_Portal_Dashboard')) WCP_Portal_Dashboard::instance();
+    if (class_exists('WCP_Portal_Orders')) WCP_Portal_Orders::instance();
+    if (class_exists('WCP_Portal_Downloads')) WCP_Portal_Downloads::instance();
 }
 add_action('plugins_loaded', 'load_customer_portal_files', 20);
 
@@ -195,44 +127,37 @@ function register_licenses_endpoint() {
 add_action('init', 'register_licenses_endpoint');
 
 /**
- * Debug - Check loaded classes
+ * ✅ PRODUCTION: Debug footer - hanya untuk admin + query string
  */
 add_action('wp_footer', function() {
-    if (!current_user_can('manage_options')) return;
+    // ✅ Require admin + explicit enable
+    if (!current_user_can('manage_options') || !isset($_GET['wcp_debug'])) {
+        return;
+    }
     
     echo '<div style="position:fixed;bottom:10px;right:10px;background:#1e293b;color:#10b981;padding:15px;z-index:99999;font-family:monospace;font-size:11px;max-width:350px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);">';
-    echo '<strong style="color:#60a5fa;">🔍 WCP DEBUG:</strong><br>';
+    echo '<strong style="color:#60a5fa;">🔍 MCP DEBUG:</strong><br>';
     echo 'Version: ' . (defined('WCP_VERSION') ? '<span style="color:#10b981;">✓ ' . WCP_VERSION . '</span>' : '<span style="color:#ef4444;">✗</span>') . '<br>';
     echo 'Plugin Dir: ' . (defined('WCP_PLUGIN_DIR') && is_dir(WCP_PLUGIN_DIR) ? '<span style="color:#10b981;">✓</span>' : '<span style="color:#ef4444;">✗</span>') . '<br>';
     echo 'Templates Dir: ' . (defined('WCP_TEMPLATES_DIR') && is_dir(WCP_TEMPLATES_DIR) ? '<span style="color:#10b981;">✓</span>' : '<span style="color:#ef4444;">✗</span>') . '<br>';
     echo '<hr style="border:1px solid #334155;margin:8px 0;">';
     echo 'Helpers: ' . (class_exists('WCP_Portal_Helpers') ? '<span style="color:#10b981;">✓</span>' : '<span style="color:#ef4444;">✗</span>') . '<br>';
     echo 'Dashboard: ' . (class_exists('WCP_Portal_Dashboard') ? '<span style="color:#10b981;">✓</span>' : '<span style="color:#ef4444;">✗</span>') . '<br>';
-    echo '<hr style="border:1px solid #334155;margin:8px 0;">';
-    
-    global $wp_filter;
-    $dashboard_hooks = isset($wp_filter['woocommerce_account_dashboard']) ? count($wp_filter['woocommerce_account_dashboard']->callbacks) : 0;
-    echo 'Dashboard Hooks: <span style="color:#fbbf24;">' . $dashboard_hooks . '</span><br>';
-    
     echo '</div>';
 });
+
 /**
  * =====================================================
- * SECURITY HELPER FUNCTIONS - NEW!
+ * SECURITY HELPER FUNCTIONS
  * =====================================================
  */
 
-/**
- * Sanitize IP Address - SECURITY FIX
- * Mencegah SQL injection dari IP address
- */
 if (!function_exists('alm_sanitize_ip')) {
     function alm_sanitize_ip($ip = null) {
         if ($ip === null) {
             $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
         }
         
-        // Validate IP address format
         $validated_ip = filter_var($ip, FILTER_VALIDATE_IP);
         
         if ($validated_ip === false) {
@@ -244,17 +169,12 @@ if (!function_exists('alm_sanitize_ip')) {
     }
 }
 
-/**
- * Validate License Key Format - SECURITY FIX
- * Memastikan license key sesuai format yang diizinkan
- */
 if (!function_exists('alm_validate_license_key')) {
     function alm_validate_license_key($license_key) {
         if (empty($license_key)) {
             return false;
         }
         
-        // License key harus alphanumeric dan dash, minimal 20 karakter
         if (!preg_match('/^[A-Z0-9\-]{20,}$/i', $license_key)) {
             alm_error_log('Invalid license key format: ' . substr($license_key, 0, 10) . '...');
             return false;
@@ -264,17 +184,12 @@ if (!function_exists('alm_validate_license_key')) {
     }
 }
 
-/**
- * Validate Domain/Site URL - SECURITY FIX
- * Block localhost dan development domains untuk produksi
- */
 if (!function_exists('alm_validate_domain')) {
     function alm_validate_domain($site_url) {
         if (empty($site_url)) {
             return false;
         }
         
-        // List domain yang diblokir (development environments)
         $blocked_domains = array(
             'localhost',
             '127.0.0.1',
@@ -297,7 +212,6 @@ if (!function_exists('alm_validate_domain')) {
             }
         }
         
-        // Validate URL format
         if (!filter_var($site_url, FILTER_VALIDATE_URL)) {
             alm_error_log('Invalid URL format: ' . $site_url);
             return false;
@@ -307,9 +221,6 @@ if (!function_exists('alm_validate_domain')) {
     }
 }
 
-/**
- * Validate Email Address - SECURITY FIX
- */
 if (!function_exists('alm_validate_email')) {
     function alm_validate_email($email) {
         if (empty($email)) {
@@ -327,9 +238,6 @@ if (!function_exists('alm_validate_email')) {
     }
 }
 
-/**
- * Verify Nonce Wrapper - SECURITY FIX
- */
 if (!function_exists('alm_verify_nonce')) {
     function alm_verify_nonce($nonce, $action) {
         if (empty($nonce)) {
@@ -349,11 +257,10 @@ if (!function_exists('alm_verify_nonce')) {
 
 /**
  * =====================================================
- * EXISTING HELPER FUNCTIONS - ENHANCED
+ * HELPER FUNCTIONS
  * =====================================================
  */
 
-// Helper untuk validasi post/get
 if (!function_exists('alm_safe_post')) {
     function alm_safe_post($key, $default = '') {
         return isset($_POST[$key]) ? sanitize_text_field($_POST[$key]) : $default;
@@ -366,7 +273,6 @@ if (!function_exists('alm_safe_get')) {
     }
 }
 
-// Helper error log
 if (!function_exists('alm_error_log')) {
     function alm_error_log($message) {
         if (defined('WP_DEBUG') && WP_DEBUG) {
@@ -375,21 +281,19 @@ if (!function_exists('alm_error_log')) {
     }
 }
 
-function alm_safe_str_replace($search, $replace, $subject) {
-    if (!is_string($subject) && !is_array($subject)) {
-        $subject = (string) $subject;
+if (!function_exists('alm_safe_str_replace')) {
+    function alm_safe_str_replace($search, $replace, $subject) {
+        if (!is_string($subject) && !is_array($subject)) {
+            $subject = (string) $subject;
+        }
+        return str_replace($search, $replace, $subject);
     }
-    return str_replace($search, $replace, $subject);
 }
 
-if ( ! function_exists('normalize_domain') ) {
-    /**
-     * Menormalkan URL menjadi domain dasar.
-     */
-    function normalize_domain( $url ) {
-        // SECURITY: Validate URL first
+if (!function_exists('normalize_domain')) {
+    function normalize_domain($url) {
         if (!filter_var($url, FILTER_VALIDATE_URL)) {
-            $url = 'http://' . $url; // Try adding protocol
+            $url = 'http://' . $url;
         }
         
         $host = parse_url(trim($url), PHP_URL_HOST) ?: trim($url);
@@ -400,11 +304,8 @@ if ( ! function_exists('normalize_domain') ) {
     }
 }
 
-if ( ! function_exists('alm_api_permission_check') ) {
-    /**
-     * Memeriksa izin request API berdasarkan daftar secret key yang valid.
-     */
-    function alm_api_permission_check( WP_REST_Request $request ) {
+if (!function_exists('alm_api_permission_check')) {
+    function alm_api_permission_check(WP_REST_Request $request) {
         $valid_keys = get_option('alm_secret_keys', []);
         if (empty($valid_keys) || !is_array($valid_keys)) {
             alm_error_log('API authentication not configured');
@@ -418,7 +319,6 @@ if ( ! function_exists('alm_api_permission_check') ) {
             return new WP_Error('rest_forbidden', 'Missing authentication header.', ['status' => 401]);
         }
 
-        // SECURITY: Use timing-safe comparison
         $is_valid = false;
         foreach ($valid_keys as $valid_key) {
             if (hash_equals($valid_key, $sent_secret_key)) {
@@ -438,105 +338,89 @@ if ( ! function_exists('alm_api_permission_check') ) {
 
 /**
  * =====================================================
- * RATE LIMITING - ENHANCED SECURITY
+ * RATE LIMITING & SECURITY
  * =====================================================
  */
 
-/**
- * Enhanced Rate Limiting - SECURITY FIX
- * Check both license key AND IP address
- */
-function alm_check_rate_limit($license_key, $check_ip = true) {
-    if (empty($license_key)) {
-        return false;
-    }
-    
-    // Rate limit per license key
-    $cache_key_license = 'alm_rate_license_' . md5($license_key);
-    $attempts_license = get_transient($cache_key_license);
-    
-    if ($attempts_license === false) {
-        $attempts_license = 0;
-    }
-    
-    // 10 requests per minute per license
-    if ($attempts_license >= 10) {
-        alm_error_log('Rate limit exceeded for license: ' . substr($license_key, 0, 10) . '...');
-        return false;
-    }
-    
-    // Rate limit per IP (if enabled)
-    if ($check_ip) {
-        $ip = alm_sanitize_ip();
-        $cache_key_ip = 'alm_rate_ip_' . md5($ip);
-        $attempts_ip = get_transient($cache_key_ip);
-        
-        if ($attempts_ip === false) {
-            $attempts_ip = 0;
-        }
-        
-        // 20 requests per minute per IP (lebih tinggi karena bisa multiple licenses)
-        if ($attempts_ip >= 20) {
-            alm_error_log('Rate limit exceeded for IP: ' . $ip);
+if (!function_exists('alm_check_rate_limit')) {
+    function alm_check_rate_limit($license_key, $check_ip = true) {
+        if (empty($license_key)) {
             return false;
         }
         
-        set_transient($cache_key_ip, $attempts_ip + 1, MINUTE_IN_SECONDS);
+        $cache_key_license = 'alm_rate_license_' . md5($license_key);
+        $attempts_license = get_transient($cache_key_license);
+        
+        if ($attempts_license === false) {
+            $attempts_license = 0;
+        }
+        
+        if ($attempts_license >= 10) {
+            alm_error_log('Rate limit exceeded for license: ' . substr($license_key, 0, 10) . '...');
+            return false;
+        }
+        
+        if ($check_ip) {
+            $ip = alm_sanitize_ip();
+            $cache_key_ip = 'alm_rate_ip_' . md5($ip);
+            $attempts_ip = get_transient($cache_key_ip);
+            
+            if ($attempts_ip === false) {
+                $attempts_ip = 0;
+            }
+            
+            if ($attempts_ip >= 20) {
+                alm_error_log('Rate limit exceeded for IP: ' . $ip);
+                return false;
+            }
+            
+            set_transient($cache_key_ip, $attempts_ip + 1, MINUTE_IN_SECONDS);
+        }
+        
+        set_transient($cache_key_license, $attempts_license + 1, MINUTE_IN_SECONDS);
+        return true;
     }
-    
-    set_transient($cache_key_license, $attempts_license + 1, MINUTE_IN_SECONDS);
-    return true;
 }
 
-/**
- * =====================================================
- * ANTI-SPAM & FRAUD DETECTION
- * =====================================================
- */
-
-/**
- * Check Activation Spam - SECURITY FIX
- * Improved with proper IP sanitization
- */
-function alm_check_activation_spam($license_key) {
-    global $wpdb;
-    
-    // SECURITY FIX: Sanitize IP address
-    $ip = alm_sanitize_ip();
-    $now = current_time('mysql');
-    $limit = 10; // max 10 aktivasi per jam per IP
-
-    $count = $wpdb->get_var( $wpdb->prepare(
-        "SELECT COUNT(*) FROM {$wpdb->prefix}alm_license_activations 
-         WHERE site_url = %s 
-         AND activated_at >= DATE_SUB(%s, INTERVAL 1 HOUR)",
-         $ip, $now
-    ));
-    
-    if($count > $limit) {
-        // Catat di log dengan IP yang sudah di-sanitize
-        $wpdb->insert(
-            "{$wpdb->prefix}alm_logs", 
-            array(
-                'log_time' => $now,
-                'action' => 'alert',
-                'license_key' => sanitize_text_field($license_key),
-                'ip_address' => $ip, // Already sanitized
-                'site_url' => '',
-                'message' => sprintf(
-                    'Suspicious activation pattern: %d attempts in 1 hour from IP %s',
-                    intval($count),
-                    $ip
-                )
-            ),
-            array('%s', '%s', '%s', '%s', '%s', '%s')
-        );
+if (!function_exists('alm_check_activation_spam')) {
+    function alm_check_activation_spam($license_key) {
+        global $wpdb;
         
-        alm_error_log('Activation spam detected from IP: ' . $ip);
-        return false;
+        $ip = alm_sanitize_ip();
+        $now = current_time('mysql');
+        $limit = 10;
+
+        $count = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$wpdb->prefix}alm_license_activations 
+             WHERE site_url = %s 
+             AND activated_at >= DATE_SUB(%s, INTERVAL 1 HOUR)",
+             $ip, $now
+        ));
+        
+        if ($count > $limit) {
+            $wpdb->insert(
+                "{$wpdb->prefix}alm_logs", 
+                array(
+                    'log_time' => $now,
+                    'action' => 'alert',
+                    'license_key' => sanitize_text_field($license_key),
+                    'ip_address' => $ip,
+                    'site_url' => '',
+                    'message' => sprintf(
+                        'Suspicious activation pattern: %d attempts in 1 hour from IP %s',
+                        intval($count),
+                        $ip
+                    )
+                ),
+                array('%s', '%s', '%s', '%s', '%s', '%s')
+            );
+            
+            alm_error_log('Activation spam detected from IP: ' . $ip);
+            return false;
+        }
+        
+        return true;
     }
-    
-    return true;
 }
 
 /**
@@ -545,25 +429,22 @@ function alm_check_activation_spam($license_key) {
  * =====================================================
  */
 
-function get_license_manager_info() {
-    // Buat objek DateTime dengan timezone Asia/Jakarta (WIB)
-    $date_wib = new DateTime('now', new DateTimeZone('Asia/Jakarta'));
-    
-    return array(
-        'datetime_wib' => $date_wib->format('Y-m-d H:i:s'), // Format WIB
-        'user_login' => wp_get_current_user()->user_login
-    );
+if (!function_exists('get_license_manager_info')) {
+    function get_license_manager_info() {
+        $date_wib = new DateTime('now', new DateTimeZone('Asia/Jakarta'));
+        
+        return array(
+            'datetime_wib' => $date_wib->format('Y-m-d H:i:s'),
+            'user_login' => wp_get_current_user()->user_login
+        );
+    }
 }
 
-/**
- * Generate Hardware ID untuk binding
- * Mencegah license di-copy ke server lain
- */
 if (!function_exists('alm_generate_hwid')) {
     function alm_generate_hwid($site_url) {
         $components = array(
             $site_url,
-            php_uname('n'), // Hostname
+            php_uname('n'),
             $_SERVER['SERVER_SOFTWARE'] ?? '',
             phpversion()
         );
@@ -571,3 +452,55 @@ if (!function_exists('alm_generate_hwid')) {
         return hash('sha256', implode('|', $components));
     }
 }
+
+
+/**
+ * =====================================================
+ * SEND TEST LICENSE EMAIL
+ * URL: yoursite.com/?alm_test_email=your@email.com
+ * =====================================================
+ */
+add_action('init', 'alm_send_test_license_email');
+
+function alm_send_test_license_email() {
+    // Security: Only for admin
+    if (!isset($_GET['alm_test_email']) || !current_user_can('manage_options')) {
+        return;
+    }
+    
+    $test_email = sanitize_email($_GET['alm_test_email']);
+    
+    if (!is_email($test_email)) {
+        wp_die('❌ Invalid email address. <br><a href="' . admin_url() . '">Back to Dashboard</a>');
+    }
+    
+    // Test data
+    $license_key = 'TEST-' . strtoupper(substr(md5(time()), 0, 16));
+    $expiry_date = date('Y-m-d H:i:s', strtotime('+1 year'));
+    $product_name = 'Mediman Pro Theme (TEST EMAIL)';
+    $activation_limit = 1;
+    $order_id = 99999;
+    
+    // Send email using your function
+    $sent = alm_send_license_email($test_email, $license_key, $expiry_date, $product_name, $activation_limit, $order_id);
+    
+    if ($sent) {
+        wp_die('
+            <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 50px auto; padding: 30px; background: #f0f9ff; border-radius: 10px; border-left: 5px solid #0ea5e9;">
+                <h2 style="color: #0c4a6e; margin: 0 0 15px;">✅ Test Email Sent Successfully!</h2>
+                <p style="color: #334155; margin: 0 0 15px;">Email telah dikirim ke: <strong>' . esc_html($test_email) . '</strong></p>
+                <p style="color: #64748b; font-size: 14px; margin: 0 0 20px;">License Key: <code style="background: #fff; padding: 5px 10px; border-radius: 4px;">' . esc_html($license_key) . '</code></p>
+                <a href="' . admin_url() . '" style="display: inline-block; background: #0ea5e9; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Back to Dashboard</a>
+            </div>
+        ');
+    } else {
+        wp_die('
+            <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 50px auto; padding: 30px; background: #fef2f2; border-radius: 10px; border-left: 5px solid #ef4444;">
+                <h2 style="color: #7f1d1d; margin: 0 0 15px;">❌ Failed to Send Email</h2>
+                <p style="color: #334155;">Check your email configuration.</p>
+                <a href="' . admin_url() . '" style="display: inline-block; background: #ef4444; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-top: 15px;">Back to Dashboard</a>
+            </div>
+        ');
+    }
+}
+

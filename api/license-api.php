@@ -2,7 +2,7 @@
 /**
  * license-api.php
  * REST API untuk aktivasi & manajemen lisensi.
- * Version: 2025-08-06 14:52:22
+ * Version: 2025-10-24 - PRODUCTION VERSION (Clean)
  */
 
 if (!defined('ABSPATH')) exit;
@@ -14,7 +14,6 @@ function alm_insert_log($license_key, $action, $message, $site_url = '') {
     global $wpdb;
     $log_table = $wpdb->prefix . 'alm_logs';
     
-    // Get current info
     $current_time_utc = gmdate('Y-m-d H:i:s');
     $current_user = '';
     if (function_exists('wp_get_current_user')) {
@@ -22,7 +21,6 @@ function alm_insert_log($license_key, $action, $message, $site_url = '') {
         $current_user = $current_user->user_login;
     }
 
-    // Insert log dengan format yang konsisten
     return $wpdb->insert(
         $log_table,
         array(
@@ -30,15 +28,44 @@ function alm_insert_log($license_key, $action, $message, $site_url = '') {
             'action' => $action,
             'message' => sprintf('[%s] %s - %s', $current_time_utc, $current_user, $message),
             'site_url' => $site_url,
-            'ip_address' => $_SERVER['REMOTE_ADDR'],
+            'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '',
             'log_time' => $current_time_utc
         ),
         array('%s', '%s', '%s', '%s', '%s', '%s')
     );
 }
 
+function alm_send_webhook_license_deactivated($webhook_url, $payload, $webhook_secret) {
+    if (isset($payload['signature'])) unset($payload['signature']);
+    error_log('SERVER SECRET: ' . $webhook_secret);
+    $signature = hash_hmac('sha256', json_encode($payload), $webhook_secret);
+    $payload['signature'] = $signature;
+
+    $ch = curl_init($webhook_url);
+    curl_setopt($ch, CURLOPT_POST, 1);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/json',
+        'Accept: application/json'
+    ]);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    $result = curl_exec($ch);
+    $err = curl_error($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+    // LOGGING DEBUG
+    error_log('WEBHOOK POST TO: '.$webhook_url);
+    error_log('WEBHOOK PAYLOAD: '.json_encode($payload));
+    error_log('WEBHOOK HTTP CODE: '.$http_code);
+    error_log('WEBHOOK CURL ERROR: '.$err);
+    error_log('WEBHOOK RESPONSE: '.$result);
+
+    curl_close($ch);
+}
+
+
 function log_license_api_activity($action, $status) {
-    // Log aktivitas dengan format yang konsisten
     alm_insert_log('SYSTEM', $action, sprintf('[%s] %s - %s', 
         gmdate('Y-m-d H:i:s'),
         function_exists('wp_get_current_user') ? wp_get_current_user()->user_login : 'system',
@@ -50,12 +77,18 @@ function alm_api_permission_check(WP_REST_Request $request) {
     return ALM_Security::get_instance()->check_api_auth($request);
 }
 
+/**
+ * Endpoint validasi license dengan logic expired yang benar
+ */
 function alm_rest_api_license_validate(WP_REST_Request $request) {
     global $wpdb;
     
     $license_key = sanitize_text_field($request->get_param('license_key'));
     $site_url = sanitize_text_field($request->get_param('site_url'));
     $normalized_site_url = normalize_domain($site_url);
+    
+    $license_table = $wpdb->prefix . 'alm_licenses';
+    $activation_table = $wpdb->prefix . 'alm_license_activations';
 
     // Cek rate limit
     if (!alm_check_rate_limit($license_key)) {
@@ -66,9 +99,7 @@ function alm_rest_api_license_validate(WP_REST_Request $request) {
         ], 429);
     }
 
-    $license_table = $wpdb->prefix . 'alm_licenses';
-    $activation_table = $wpdb->prefix . 'alm_license_activations';
-
+    // 1. CEK LICENSE KEY EXISTS
     $license = $wpdb->get_row($wpdb->prepare(
         "SELECT * FROM `$license_table` WHERE `license_key` = %s",
         $license_key
@@ -82,7 +113,8 @@ function alm_rest_api_license_validate(WP_REST_Request $request) {
         ], 404);
     }
 
-    if ($license->status !== 'active') {
+    // 2. CEK STATUS (hanya block revoked/inactive, allow expired)
+    if ($license->status !== 'active' && $license->status !== 'expired') {
         $message = '';
         switch($license->status) {
             case 'revoked':
@@ -103,31 +135,57 @@ function alm_rest_api_license_validate(WP_REST_Request $request) {
         ], 403);
     }
 
-    if (!empty($license->expires) && strtotime($license->expires) < current_time('timestamp')) {
-        alm_insert_log($license_key, 'validate_fail', 'License expired.', $normalized_site_url);
-        return new WP_REST_Response([
-            'success' => false,
-            'message' => 'Lisensi sudah kedaluwarsa.'
-        ], 403);
-    }
-
-    $already = $wpdb->get_var($wpdb->prepare(
+    // 3. CEK APAKAH SUDAH PERNAH DIAKTIVASI (PRIORITAS UTAMA)
+    $already_activated = $wpdb->get_var($wpdb->prepare(
         "SELECT COUNT(*) FROM `$activation_table` WHERE `license_id` = %d AND `site_url` = %s",
         $license->id,
         $normalized_site_url
     ));
 
-    if ((int)$already > 0) {
-        alm_insert_log($license_key, 'validate_success', 'Already activated.', $normalized_site_url);
+    // 4. JIKA SUDAH AKTIF - CEK EXPIRED STATUS (TAPI TETAP IZINKAN)
+    if ((int)$already_activated > 0) {
+        $is_expired = false;
+        $can_update = true;
+        $message = 'Lisensi sudah diaktivasi untuk situs ini.';
+        
+        // Cek apakah expired
+        if (!empty($license->expires) && strtotime($license->expires) < current_time('timestamp')) {
+            $is_expired = true;
+            $can_update = false;
+            $message = 'Lisensi sudah diaktivasi tapi sudah kedaluwarsa. Update tema tidak tersedia.';
+        }
+        
+        alm_insert_log(
+            $license_key, 
+            'validate_success', 
+            $is_expired ? 'Already activated (expired).' : 'Already activated (valid).', 
+            $normalized_site_url
+        );
+        
         return new WP_REST_Response([
             'success' => true,
             'already_activated' => true,
-            'message' => 'Lisensi sudah diaktivasi untuk situs ini.',
+            'is_expired' => $is_expired,
+            'can_update' => $can_update,
+            'update_allowed' => $can_update,
+            'message' => $message,
             'expires' => $license->expires,
-            'current_secret' => $current_primary_key
+            'status' => $is_expired ? 'expired' : 'active'
         ], 200);
     }
 
+    // 5. UNTUK AKTIVASI BARU - CEK EXPIRED (IZINKAN TAPI BERI FLAG EXPIRED)
+    $is_expired_new = false;
+    $can_update_new = true;
+
+    if (!empty($license->expires) && strtotime($license->expires) < current_time('timestamp')) {
+        $is_expired_new = true;
+        $can_update_new = false;
+        
+        alm_insert_log($license_key, 'validate_warning', 'License expired but activation allowed.', $normalized_site_url);
+    }
+
+    // 6. CEK ACTIVATION LIMIT (UNTUK AKTIVASI BARU)
     if ($license->activations >= $license->activation_limit) {
         alm_insert_log($license_key, 'validate_fail', 'Activation limit reached.', $normalized_site_url);
         return new WP_REST_Response([
@@ -136,6 +194,28 @@ function alm_rest_api_license_validate(WP_REST_Request $request) {
         ], 403);
     }
 
+
+// CEK: Apakah site_url sudah aktif di lisensi lain?
+$duplicate_domain = $wpdb->get_row($wpdb->prepare(
+    "SELECT la.id, la.license_id, l.license_key 
+     FROM `$activation_table` la
+     JOIN `$license_table` l ON la.license_id = l.id
+     WHERE la.site_url = %s AND la.license_id != %d
+     LIMIT 1",
+    $normalized_site_url,
+    $license->id
+));
+
+if ($duplicate_domain) {
+    return new WP_REST_Response([
+        'success' => false,
+        'message' => 'Domain/website ini sudah terdaftar pada lisensi lain: '
+            . $duplicate_domain->license_key . '. Nonaktifkan dari lisensi itu terlebih dahulu.',
+        'duplicate_license' => $duplicate_domain->license_key
+    ], 409); // 409 Conflict
+}
+
+    // 7. AKTIVASI BARU - TRANSACTION
     $wpdb->query('START TRANSACTION');
     
     try {
@@ -163,25 +243,33 @@ function alm_rest_api_license_validate(WP_REST_Request $request) {
 
         $wpdb->query('COMMIT');
         
-        alm_insert_log($license_key, 'validate_success', 'Activation successful.', $normalized_site_url);
+        alm_insert_log(
+            $license_key, 
+            'validate_success', 
+            $is_expired_new ? 'New activation successful (expired).' : 'New activation successful.', 
+            $normalized_site_url
+        );
 
         return new WP_REST_Response([
             'success' => true,
-            'message' => 'Lisensi berhasil diaktivasi.',
+            'message' => $is_expired_new 
+                ? 'Lisensi diaktivasi (expired). Theme dapat digunakan tapi update tidak tersedia.' 
+                : 'Lisensi berhasil diaktivasi.',
             'expires' => $license->expires,
-            'current_secret' => $current_primary_key
+            'can_update' => $can_update_new,
+            'update_allowed' => $can_update_new,
+            'is_expired' => $is_expired_new,
+            'status' => $is_expired_new ? 'expired' : 'active',
+            'already_activated' => false
         ], 200);
 
     } catch (Exception $e) {
-    if (function_exists('alm_error_log')) {
-        alm_error_log($e->getMessage());
+        $wpdb->query('ROLLBACK');
+        return new WP_REST_Response([
+            'success' => false,
+            'message' => 'Gagal mengaktivasi lisensi: ' . $e->getMessage()
+        ], 500);
     }
-    $wpdb->query('ROLLBACK');
-    return new WP_REST_Response([
-        'success' => false,
-        'message' => 'Gagal mengaktivasi lisensi: ' . $e->getMessage()
-    ], 500);
-}
 }
 
 /**
@@ -235,8 +323,24 @@ function alm_api_deactivate_license(WP_REST_Request $request) {
     if ($deleted) {
         $new_total = max(0, $license->activations - 1);
         $wpdb->update($license_table, ['activations' => $new_total], ['id' => $license->id]);
-
         alm_insert_log($license_key, 'deactivate_success', 'Deactivation successful.', $normalized_site_url);
+
+        // === Kirim webhook ke klien
+        $webhook_url = rtrim($site_url, '/').'/wp-json/alm/v1/license-deactivated';
+        $webhook_secret = 'mediman_webhook_2760ee05bbac6c3a069d540ab3ed50c4'; // Pastikan ini sesuai klien (lihat mediman_webhook_secret)
+        $payload = [
+            'action'        => 'license_deactivated',
+            'license_key'   => $license_key,
+            'site_url'      => $site_url,
+            'deactivated_at'=> gmdate('Y-m-d H:i:s'),
+            'product_name'  => 'Mediman',
+            'server_url'    => home_url(),
+            'server_time'   => time(),
+            'message'       => 'Dinonaktifkan dari server oleh user/admin'
+        ];
+        alm_send_webhook_license_deactivated($webhook_url, $payload, $webhook_secret);
+        // ==============
+
         return new WP_REST_Response([
             'success' => true,
             'message' => 'Lisensi berhasil dinonaktifkan.'
@@ -324,18 +428,6 @@ function alm_api_revoke_license(WP_REST_Request $request) {
 
         $wpdb->delete($activation_table, ['license_id' => $license->id]);
 
-        $remaining = $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM `$activation_table` WHERE `license_id` = %d",
-            $license->id
-        ));
-
-        if ($remaining > 0) {
-            $wpdb->query($wpdb->prepare(
-                "DELETE FROM `$activation_table` WHERE `license_id` = %d",
-                $license->id
-            ));
-        }
-
         $wpdb->query('COMMIT');
 
         alm_insert_log(
@@ -368,6 +460,73 @@ function alm_api_revoke_license(WP_REST_Request $request) {
 }
 
 /**
+ * Endpoint khusus untuk re-check license (site yang sudah aktif)
+ */
+function alm_api_recheck_license(WP_REST_Request $request) {
+    global $wpdb;
+    
+    $license_key = sanitize_text_field($request->get_param('license_key'));
+    $site_url = sanitize_text_field($request->get_param('site_url'));
+    $normalized_site_url = normalize_domain($site_url);
+    
+    $license_table = $wpdb->prefix . 'alm_licenses';
+    $activation_table = $wpdb->prefix . 'alm_license_activations';
+    
+    $license = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM `$license_table` WHERE `license_key` = %s",
+        $license_key
+    ));
+    
+    if (!$license) {
+        return new WP_REST_Response([
+            'success' => false,
+            'message' => 'Lisensi tidak ditemukan.'
+        ], 404);
+    }
+    
+    // Cek apakah sudah pernah diaktivasi
+    $activation = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM `$activation_table` WHERE `license_id` = %d AND `site_url` = %s",
+        $license->id,
+        $normalized_site_url
+    ));
+    
+    if (!$activation) {
+        return new WP_REST_Response([
+            'success' => false,
+            'message' => 'Situs ini belum pernah diaktivasi.'
+        ], 404);
+    }
+    
+    // Cek expired
+    $is_expired = false;
+    $can_update = true;
+    if (!empty($license->expires) && strtotime($license->expires) < current_time('timestamp')) {
+        $is_expired = true;
+        $can_update = false;
+    }
+    
+    // Update last_check
+    $wpdb->update(
+        $activation_table,
+        ['last_check' => current_time('mysql')],
+        ['id' => $activation->id]
+    );
+    
+    // Tetap return success meski expired
+    return new WP_REST_Response([
+        'success' => true,
+        'is_active' => true,
+        'is_expired' => $is_expired,
+        'expires' => $license->expires,
+        'can_update' => $can_update,
+        'update_allowed' => $can_update,
+        'status' => ($license->status === 'active' && !$is_expired) ? 'active' : 'expired',
+        'message' => $is_expired ? 'Lisensi aktif tapi expired. Update tidak tersedia.' : 'Lisensi aktif dan valid.'
+    ], 200);
+}
+
+/**
  * Daftarkan semua endpoint API
  */
 add_action('rest_api_init', function () {
@@ -386,321 +545,14 @@ add_action('rest_api_init', function () {
         'callback' => 'alm_api_revoke_license',
         'permission_callback' => 'alm_api_permission_check'
     ]);
+    register_rest_route('alm/v1', '/recheck', [
+        'methods' => 'POST',
+        'callback' => 'alm_api_recheck_license',
+        'permission_callback' => 'alm_api_permission_check'
+    ]);
     register_rest_route('theme-update/v1', '/info/(?P<slug>[a-zA-Z0-9-]+)', [
         'methods' => 'GET',
         'callback' => 'alm_api_get_theme_info',
         'permission_callback' => '__return_true'
     ]);
 });
-
-
-
-
-
-// Endpoint aktivasi
-function handle_activate_license() {
-    global $wpdb;
-    $license_table = $wpdb->prefix . 'alm_licenses';
-    $activation_table = $wpdb->prefix . 'alm_license_activations';
-    
-    $license_key = isset($_POST['license_key']) ? sanitize_text_field($_POST['license_key']) : '';
-    $site_url = isset($_POST['site_url']) ? esc_url_raw($_POST['site_url']) : '';
-    
-    if (empty($license_key) || empty($site_url)) {
-        alm_log_license_activity($license_key, 'activate', 'Activation failed - Missing required fields', $site_url);
-        wp_send_json_error('Missing required fields');
-        return;
-    }
-
-    $license = $wpdb->get_row($wpdb->prepare(
-        "SELECT * FROM $license_table WHERE license_key = %s",
-        $license_key
-    ));
-
-    if (!$license) {
-        alm_log_license_activity($license_key, 'activate', 'Activation failed - Invalid license key', $site_url);
-        wp_send_json_error('Invalid license key');
-        return;
-    }
-
-    if ($license->status !== 'active') {
-        alm_log_license_activity($license_key, 'activate', 'Activation failed - License not active', $site_url);
-        wp_send_json_error('License is not active');
-        return;
-    }
-
-    if ($license->activations >= $license->activation_limit) {
-        alm_log_license_activity($license_key, 'activate', 'Activation failed - Activation limit reached', $site_url);
-        wp_send_json_error('Activation limit reached');
-        return;
-    }
-
-    // Check if site is already activated
-    $existing_activation = $wpdb->get_var($wpdb->prepare(
-        "SELECT id FROM $activation_table WHERE license_id = %d AND site_url = %s",
-        $license->id,
-        $site_url
-    ));
-
-    if ($existing_activation) {
-        alm_log_license_activity($license_key, 'activate', 'Activation failed - Site already activated', $site_url);
-        wp_send_json_error('Site already activated');
-        return;
-    }
-
-    // Add new activation
-    $wpdb->insert(
-        $activation_table,
-        array(
-            'license_id' => $license->id,
-            'site_url' => $site_url,
-            'activated_at' => gmdate('Y-m-d H:i:s')
-        ),
-        array('%d', '%s', '%s')
-    );
-
-    // Update activation count
-    $wpdb->query($wpdb->prepare(
-        "UPDATE $license_table SET activations = activations + 1 WHERE id = %d",
-        $license->id
-    ));
-
-    alm_log_license_activity($license_key, 'activate', 'License activated successfully', $site_url);
-    wp_send_json_success('License activated successfully');
-}
-
-// Endpoint deaktivasi
-function handle_deactivate_license() {
-    global $wpdb;
-    $license_table = $wpdb->prefix . 'alm_licenses';
-    $activation_table = $wpdb->prefix . 'alm_license_activations';
-    
-    $license_key = isset($_POST['license_key']) ? sanitize_text_field($_POST['license_key']) : '';
-    $site_url = isset($_POST['site_url']) ? esc_url_raw($_POST['site_url']) : '';
-    
-    if (empty($license_key) || empty($site_url)) {
-        alm_log_license_activity($license_key, 'deactivate', 'Deactivation failed - Missing required fields', $site_url);
-        wp_send_json_error('Missing required fields');
-        return;
-    }
-
-    $license = $wpdb->get_row($wpdb->prepare(
-        "SELECT * FROM $license_table WHERE license_key = %s",
-        $license_key
-    ));
-
-    if (!$license) {
-        alm_log_license_activity($license_key, 'deactivate', 'Deactivation failed - Invalid license key', $site_url);
-        wp_send_json_error('Invalid license key');
-        return;
-    }
-
-    // Remove activation
-    $result = $wpdb->delete(
-        $activation_table,
-        array(
-            'license_id' => $license->id,
-            'site_url' => $site_url
-        ),
-        array('%d', '%s')
-    );
-
-    if ($result === false) {
-        alm_log_license_activity($license_key, 'deactivate', 'Deactivation failed - Database error', $site_url);
-        wp_send_json_error('Failed to deactivate license');
-        return;
-    }
-
-    // Update activation count
-    $wpdb->query($wpdb->prepare(
-        "UPDATE $license_table SET activations = GREATEST(0, activations - 1) WHERE id = %d",
-        $license->id
-    ));
-
-    alm_log_license_activity($license_key, 'deactivate', 'License deactivated successfully', $site_url);
-    wp_send_json_success('License deactivated successfully');
-}
-
-// Endpoint verifikasi
-function handle_verify_license() {
-    global $wpdb;
-    $license_table = $wpdb->prefix . 'alm_licenses';
-    $activation_table = $wpdb->prefix . 'alm_license_activations';
-    
-    $license_key = isset($_POST['license_key']) ? sanitize_text_field($_POST['license_key']) : '';
-    $site_url = isset($_POST['site_url']) ? esc_url_raw($_POST['site_url']) : '';
-    
-    if (empty($license_key) || empty($site_url)) {
-        alm_log_license_activity($license_key, 'verify', 'Verification failed - Missing required fields', $site_url);
-        wp_send_json_error('Missing required fields');
-        return;
-    }
-
-    $license = $wpdb->get_row($wpdb->prepare(
-        "SELECT * FROM $license_table WHERE license_key = %s",
-        $license_key
-    ));
-
-    if (!$license) {
-        alm_log_license_activity($license_key, 'verify', 'Verification failed - Invalid license key', $site_url);
-        wp_send_json_error('Invalid license key');
-        return;
-    }
-
-    // Check if license is active
-    if ($license->status !== 'active') {
-        alm_log_license_activity($license_key, 'verify', 'Verification failed - License not active', $site_url);
-        wp_send_json_error('License is not active');
-        return;
-    }
-
-    // Check if site is activated
-    $is_activated = $wpdb->get_var($wpdb->prepare(
-        "SELECT id FROM $activation_table WHERE license_id = %d AND site_url = %s",
-        $license->id,
-        $site_url
-    ));
-
-    if (!$is_activated) {
-        alm_log_license_activity($license_key, 'verify', 'Verification failed - Site not activated', $site_url);
-        wp_send_json_error('Site not activated');
-        return;
-    }
-
-    alm_log_license_activity($license_key, 'verify', 'License verified successfully', $site_url);
-    wp_send_json_success(array(
-        'status' => 'active',
-        'expires' => $license->expires,
-        'message' => 'License is valid and active'
-    ));
-}
-
-
-class License_Server_Handler {
-    
-    public function __construct() {
-        add_action('rest_api_init', array($this, 'register_endpoints'));
-    }
-
-    // Daftarkan endpoint API
-    public function register_endpoints() {
-        register_rest_route('mediman/v1', '/license/check', array(
-            'methods' => 'GET',
-            'callback' => array($this, 'handle_license_check'),
-            'permission_callback' => array($this, 'check_permission')
-        ));
-    }
-
-    // Cek permission
-    public function check_permission() {
-        // Implementasi validasi API key atau token
-        $api_key = isset($_SERVER['HTTP_X_API_KEY']) ? $_SERVER['HTTP_X_API_KEY'] : '';
-        return $this->validate_api_key($api_key);
-    }
-
-    // Handle pengecekan lisensi
-    public function handle_license_check($request) {
-        global $wpdb;
-
-        // Get client site URL
-        $client_site = $request->get_header('X-Client-Site');
-        
-        // Rate limiting
-        if ($this->is_rate_limited($client_site)) {
-            return new WP_REST_Response(array(
-                'status' => 429,
-                'message' => 'Too Many Requests',
-                'retry_after' => 3600 // 1 jam
-            ), 429);
-        }
-
-        // Cek di database
-        $license = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM {$wpdb->prefix}licenses 
-            WHERE site_url = %s AND status = 'active'",
-            esc_url_raw($client_site)
-        ));
-
-        if (!$license) {
-            return array(
-                'is_valid' => false,
-                'expires_date' => null,
-                'status' => 'invalid',
-                'message' => 'License not found or inactive'
-            );
-        }
-
-        // Format response
-        return array(
-            'is_valid' => true,
-            'expires_date' => $license->expires_at,
-            'status' => 'active',
-            'message' => 'License is active'
-        );
-    }
-
-    // Rate limiting implementation
-    private function is_rate_limited($client_site) {
-        $cache_key = 'license_check_' . md5($client_site);
-        $attempts = get_transient($cache_key);
-        
-        if (false === $attempts) {
-            set_transient($cache_key, 1, HOUR_IN_SECONDS);
-            return false;
-        }
-
-        if ($attempts > 5) {
-            return true;
-        }
-
-        set_transient($cache_key, $attempts + 1, HOUR_IN_SECONDS);
-        return false;
-    }
-
-    // Validate API key
-    private function validate_api_key($key) {
-        // Implementasi validasi API key Anda
-        $valid_key = get_option('mediman_license_api_key');
-        return hash_equals($valid_key, $key);
-    }
-}
-
-// Initialize
-new License_Server_Handler();
-
-// Tambahkan tabel jika belum ada
-function create_license_table() {
-    global $wpdb;
-    
-    $charset_collate = $wpdb->get_charset_collate();
-    $table_name = $wpdb->prefix . 'licenses';
-
-    $sql = "CREATE TABLE IF NOT EXISTS $table_name (
-        id bigint(20) NOT NULL AUTO_INCREMENT,
-        license_key varchar(255) NOT NULL,
-        site_url varchar(255) NOT NULL,
-        status varchar(50) NOT NULL DEFAULT 'active',
-        created_at datetime DEFAULT CURRENT_TIMESTAMP,
-        expires_at datetime DEFAULT NULL,
-        last_check datetime DEFAULT NULL,
-        check_count int DEFAULT 0,
-        PRIMARY KEY  (id),
-        UNIQUE KEY license_key (license_key),
-        KEY site_url (site_url)
-    ) $charset_collate;";
-
-    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-    dbDelta($sql);
-}
-
-register_activation_hook(__FILE__, 'create_license_table');
-
-
-add_action('wp_ajax_alm_activate_license', 'handle_activate_license');
-add_action('wp_ajax_nopriv_alm_activate_license', 'handle_activate_license');
-add_action('wp_ajax_alm_deactivate_license', 'handle_deactivate_license');
-add_action('wp_ajax_nopriv_alm_deactivate_license', 'handle_deactivate_license');
-add_action('wp_ajax_alm_verify_license', 'handle_verify_license');
-add_action('wp_ajax_nopriv_alm_verify_license', 'handle_verify_license');
-
-

@@ -21,69 +21,54 @@ class WCP_Portal_Address {
     }
 
     private function __construct() {
-        // Contoh: custom output di endpoint address WooCommerce
-        add_action('woocommerce_account_edit-address_endpoint', array($this, 'render_address_card'), 12);
-        // Bisa tambah filter/hook lain sesuai kebutuhan
+        // Custom output di endpoint edit-address WooCommerce
+        add_action('woocommerce_account_edit-address_endpoint', array($this, 'render_edit_address_header'), 12);
     }
 
-    public function render_address_card() {
-        if (!is_account_page()) return;
-
-        $user_id = get_current_user_id();
-        $address = get_user_meta($user_id, 'billing_address_1', true);
-        $city    = get_user_meta($user_id, 'billing_city', true);
-        $postcode= get_user_meta($user_id, 'billing_postcode', true);
-        $country = get_user_meta($user_id, 'billing_country', true);
-
+    /**
+     * Custom header & info di halaman edit-address WooCommerce
+     */
+    public function render_edit_address_header() {
+         error_log('WCP_Portal_Address: render_edit_address_header RUNNING!');
+    echo '<div style="background:orange;padding:10px;">DEBUG: Class WCP_Portal_Address Aktif!</div>';
+        // Bisa tambahkan logic untuk membedakan billing/shipping
+        $address_type = isset($_GET['address']) ? $_GET['address'] : 'billing';
+        $label = $address_type === 'shipping' ? 'Alamat Pengiriman' : 'Alamat Tagihan';
         ?>
-        <div class="wcp-address-card">
-            <h2><?php esc_html_e('Your Billing Address', 'wc-customer-portal'); ?></h2>
-            <div class="wcp-address-detail">
-                <span class="wcp-address-row"><?php echo esc_html($address); ?></span>
-                <span class="wcp-address-row"><?php echo esc_html($city); ?>, <?php echo esc_html($postcode); ?></span>
-                <span class="wcp-address-row"><?php echo esc_html($country); ?></span>
-            </div>
-            <a href="<?php echo esc_url( wc_get_endpoint_url('edit-address', '', wc_get_page_permalink('myaccount')) ); ?>" class="wcp-address-edit-btn">
-                <?php esc_html_e('Edit Address', 'wc-customer-portal'); ?>
-            </a>
+        <div class="wcp-edit-address-card">
+            <h2>
+                <span style="font-size:2rem;vertical-align:-5px;">🏠</span>
+                <?php echo esc_html($label); ?>
+            </h2>
+            <p class="wcp-edit-address-desc">
+                Silakan isi atau ubah data alamat <?php echo strtolower($label); ?> Anda. Data ini digunakan untuk pengiriman dan tagihan pesanan.
+            </p>
+            <!-- Bisa tambahkan info, banner, atau instruksi lain di sini -->
         </div>
         <style>
-        .wcp-address-card {
-            background: linear-gradient(90deg,#e0e7ff 0%, #f1f5f9 100%);
-            border-radius: 20px;
-            box-shadow: 0 2px 16px rgba(59,130,246,0.10);
-            padding: 34px 38px;
-            margin-bottom: 32px;
-            margin-top: 12px;
-            max-width: 600px;
+        .wcp-edit-address-card {
+            background: linear-gradient(90deg,#f8fafc 0%, #f1f5f9 100%);
+            border-radius: 18px;
+            box-shadow: 0 2px 16px rgba(59,130,246,0.06);
+            padding: 30px 34px;
+            margin-bottom: 28px;
+            margin-top: 7px;
+            max-width: 640px;
         }
-        .wcp-address-card h2 {
-            font-size: 1.25rem;
-            margin-bottom: 18px;
-            color: #312e81;
+        .wcp-edit-address-card h2 {
+            font-size: 1.7rem;
             font-weight: 700;
+            margin-bottom: 10px;
+            color: #2563eb;
         }
-        .wcp-address-detail {
-            margin-bottom: 18px;
-            color: #374151;
-            font-size: 1.05rem;
+        .wcp-edit-address-desc {
+            color: #64748b;
+            font-size: 1.1rem;
+            margin-bottom: 0;
         }
-        .wcp-address-row {
-            display: block;
-            margin-bottom: 6px;
-        }
-        .wcp-address-edit-btn {
-            background: #3b82f6;
-            color: #fff;
-            padding: 11px 24px;
-            border-radius: 10px;
-            font-weight: 700;
-            text-decoration: none;
-            transition: background 0.22s;
-            display: inline-block;
-        }
-        .wcp-address-edit-btn:hover {
-            background: #2563eb;
+        @media (max-width: 500px) {
+            .wcp-edit-address-card { padding: 18px 10px; }
+            .wcp-edit-address-card h2 { font-size:1.2rem;}
         }
         </style>
         <?php

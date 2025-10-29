@@ -1,8 +1,8 @@
 <?php
 /**
  * WooCommerce Integration for License Manager
- * Version: 2.0 - Security Enhanced
- * Last Updated: 2025-10-02
+ * Version: 2.2 - Production Ready (Final - Email Template Fixed)
+ * Last Updated: 2025-10-24
  * 
  * @package License Manager
  */
@@ -58,15 +58,26 @@ function alm_create_license_after_order($order_id) {
             continue;
         }
 
+        // ✅ DEBUG LOG (Temporary - remove after testing)
+        error_log('===== LICENSE DEBUG START =====');
+        error_log('Order ID: ' . $order_id);
+        error_log('Product ID: ' . $product->get_id());
+        error_log('Product Name: ' . $product->get_name());
+        
         // 2. Get activation limit from variation or product
         $activation_limit = 1;
+        $variation_id = $item->get_variation_id();
         
-        if ($item->get_variation_id()) {
-            $activation_limit = get_post_meta($item->get_variation_id(), '_activation_limit', true);
+        error_log('Variation ID: ' . ($variation_id ? $variation_id : 'NULL (Simple Product)'));
+        
+        if ($variation_id) {
+            $activation_limit = get_post_meta($variation_id, '_activation_limit', true);
+            error_log('Activation Limit from Variation: ' . ($activation_limit ? $activation_limit : 'NOT SET'));
         }
         
         if (empty($activation_limit)) {
             $activation_limit = get_post_meta($product->get_id(), '_activation_limit', true);
+            error_log('Activation Limit from Product: ' . ($activation_limit ? $activation_limit : 'NOT SET'));
         }
         
         // Validate & sanitize activation limit
@@ -74,18 +85,23 @@ function alm_create_license_after_order($order_id) {
         if ($activation_limit < 1) {
             $activation_limit = 1;
         }
+        
+        error_log('FINAL Activation Limit: ' . $activation_limit);
 
         // 3. Calculate expiry date
         $expiry_date = date('Y-m-d H:i:s', strtotime('+1 year'));
 
-        // 4. Generate secure license key (use existing secure function)
+        // 4. Generate secure license key
         $license_generator = ALM_License_Generator::get_instance();
         $license_key = $license_generator->generate_license_key();
         
         if (!$license_key) {
             alm_error_log('Failed to generate license key for order: ' . $order_id);
+            error_log('===== LICENSE DEBUG END (FAILED - No Key) =====');
             continue;
         }
+        
+        error_log('Generated License Key: ' . $license_key);
 
         // 5. Sanitize customer data
         $customer_email = sanitize_email($order->get_billing_email());
@@ -95,10 +111,11 @@ function alm_create_license_after_order($order_id) {
         // Validate email
         if (!is_email($customer_email)) {
             alm_error_log('Invalid email for order: ' . $order_id);
+            error_log('===== LICENSE DEBUG END (FAILED - Invalid Email) =====');
             continue;
         }
 
-        // 6. Save license to database (use prepared statements)
+        // ✅ 6. Save license to database (WITH transfer_limit)
         $result = $wpdb->insert(
             $wpdb->prefix . 'alm_licenses',
             [
@@ -110,17 +127,34 @@ function alm_create_license_after_order($order_id) {
                 'expires'          => $expiry_date,
                 'status'           => 'active',
                 'order_id'         => $order_id,
+                'transfer_limit'   => 1,  // ✅ FIXED: Always 1 transfer per year
+                'transfer_count'   => 0,  // ✅ FIXED: Start at 0
                 'created_at'       => current_time('mysql')
             ],
-            ['%s', '%s', '%s', '%d', '%d', '%s', '%s', '%d', '%s']
+            ['%s', '%s', '%s', '%d', '%d', '%s', '%s', '%d', '%d', '%d', '%s']
         );
 
         if ($result === false) {
             alm_error_log('Failed to save license to database: ' . $wpdb->last_error);
+            error_log('Database Error: ' . $wpdb->last_error);
+            error_log('===== LICENSE DEBUG END (FAILED - DB Insert) =====');
             continue;
         }
+        
+        error_log('License saved to database successfully!');
+        error_log('===== LICENSE DEBUG END (SUCCESS) =====');
 
-        // 7. Log activity
+        // 7. Add order note
+        $order->add_order_note(
+            sprintf(
+                'License created: %s | Activation Limit: %d | Transfer: 1/year | Expires: %s',
+                $license_key,
+                $activation_limit,
+                date_i18n(get_option('date_format'), strtotime($expiry_date))
+            )
+        );
+
+        // 8. Log activity
         alm_insert_log(
             $license_key,
             'license_created',
@@ -128,10 +162,11 @@ function alm_create_license_after_order($order_id) {
             ''
         );
 
-        // 8. Send email to customer
+        // 9. Send email to customer
         alm_send_license_email($customer_email, $license_key, $expiry_date, $product_name, $activation_limit, $order_id);
     }
 }
+
 
 /**
  * =====================================================
@@ -143,121 +178,245 @@ function alm_is_license_product($product) {
         return false;
     }
     
+    // ✅ FORCE CHECK - Bypass tag/category
+    // Product ID 72 = Your Mediman Theme product
+    $product_id = $product->get_id();
+    
+    // Get parent ID if this is a variation
+    if ($product->is_type('variation')) {
+        $parent_id = $product->get_parent_id();
+        if (in_array($parent_id, [72])) {
+            return true;
+        }
+    }
+    
+    // Check direct product ID
+    if (in_array($product_id, [72])) {
+        return true;
+    }
+    
     // Method 1: Check product tag "lisensi"
-    if (has_term('lisensi', 'product_tag', $product->get_id())) {
+    if (has_term('lisensi', 'product_tag', $product_id)) {
         return true;
     }
     
     // Method 2: Check custom field
-    $is_license = get_post_meta($product->get_id(), '_is_license_product', true);
+    $is_license = get_post_meta($product_id, '_is_license_product', true);
     if ($is_license === 'yes') {
         return true;
     }
     
     // Method 3: Check product category
-    if (has_term('license', 'product_cat', $product->get_id())) {
+    if (has_term('license', 'product_cat', $product_id)) {
         return true;
     }
     
     return false;
 }
 
+
 /**
  * =====================================================
- * SEND LICENSE EMAIL TO CUSTOMER
+ * SEND LICENSE EMAIL - FIXED & PRODUCTION READY
  * =====================================================
  */
 function alm_send_license_email($to, $license_key, $expiry_date, $product_name, $activation_limit, $order_id) {
-    // Validate email
     if (!is_email($to)) {
         alm_error_log('Invalid email for license notification: ' . $to);
         return false;
     }
     
-    // Email subject
-    $subject = sprintf('[%s] Lisensi %s Anda', get_bloginfo('name'), $product_name);
+    $custom_logo_url = 'https://aratheme.id/wp-content/uploads/2025/10/logo-aratheme-warna-with-text.png';
+    $site_name = get_bloginfo('name');
+    $site_url = home_url();
+    $logo_url = $custom_logo_url;
     
-    // Email body
+    if (empty($logo_url)) {
+        if (has_custom_logo()) {
+            $custom_logo_id = get_theme_mod('custom_logo');
+            $logo_url = wp_get_attachment_image_url($custom_logo_id, 'full');
+        }
+        if (empty($logo_url) && has_site_icon()) {
+            $logo_url = get_site_icon_url(200);
+        }
+    }
+    
+    $subject = sprintf('Lisensi %s - Kode Aktivasi Anda', $product_name);
+    
     $body = sprintf('
-        <html>
-        <head>
-            <style>
-                body { font-family: Arial, sans-serif; line-height: 1.6; }
-                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                .header { background: #0073aa; color: white; padding: 20px; text-align: center; }
-                .content { padding: 20px; background: #f9f9f9; }
-                .license-box { background: white; padding: 15px; border: 2px solid #0073aa; border-radius: 5px; margin: 20px 0; }
-                .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
-                code { background: #f0f0f0; padding: 5px 10px; border-radius: 3px; font-size: 14px; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>Terima Kasih Atas Pembelian Anda!</h1>
-                </div>
-                <div class="content">
-                    <p>Halo,</p>
-                    <p>Terima kasih telah membeli <strong>%s</strong>.</p>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0; padding:0; background:#ffffff; font-family:\'SF Pro Display\',-apple-system,sans-serif;">
+    
+    <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" border="0">
+        <tr>
+            <td align="center" style="padding:60px 20px;">
+                
+                <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0">
                     
-                    <div class="license-box">
-                        <h3>📋 Informasi Lisensi Anda:</h3>
-                        <p><strong>Kode Lisensi:</strong><br><code>%s</code></p>
-                        <p><strong>Produk:</strong> %s</p>
-                        <p><strong>Batas Aktivasi:</strong> %d website</p>
-                        <p><strong>Berlaku Hingga:</strong> %s</p>
-                        <p><strong>Order ID:</strong> #%d</p>
-                    </div>
+                    <!-- LOGO/HEADER -->
+                    <tr>
+                        <td style="padding:0 0 40px; text-align:center;">
+                            %s
+                            <h1 style="margin:0; font-size:28px; font-weight:300; color:#000000; letter-spacing:-1px;">
+                                %s
+                            </h1>
+                        </td>
+                    </tr>
                     
-                    <h3>🔧 Cara Aktivasi:</h3>
-                    <ol>
-                        <li>Login ke WordPress admin website Anda</li>
-                        <li>Buka menu <strong>Appearance → Aktivasi Lisensi</strong></li>
-                        <li>Masukkan kode lisensi di atas</li>
-                        <li>Klik "Aktivasi"</li>
-                    </ol>
+                    <!-- GREETING -->
+                    <tr>
+                        <td style="padding:0 0 30px;">
+                            <p style="margin:0; font-size:18px; color:#000000; line-height:1.6;">
+                                Terima kasih telah membeli<br>
+                                <strong style="font-weight:600;">%s</strong>
+                            </p>
+                        </td>
+                    </tr>
                     
-                    <p><strong>⚠️ Penting:</strong> Simpan email ini dengan baik. Anda akan membutuhkan kode lisensi untuk aktivasi dan update tema.</p>
-                </div>
-                <div class="footer">
-                    <p>Email ini dikirim otomatis dari %s</p>
-                    <p>Jika ada pertanyaan, silakan hubungi support kami.</p>
-                </div>
-            </div>
-        </body>
-        </html>
+                    <!-- LICENSE KEY with VISUAL BUTTON -->
+                    <tr>
+                        <td style="padding:0 0 40px;">
+                            <div style="background:linear-gradient(135deg, #f0f9ff 0%%, #e0f2fe 100%%); padding:32px; border-radius:8px; border-left:4px solid #0ea5e9;">
+                                <p style="margin:0 0 12px; font-size:11px; color:#0369a1; text-transform:uppercase; letter-spacing:1px; font-weight:600;">
+                                    ✓ KODE LISENSI ANDA
+                                </p>
+                                
+                                <table width="100%%" cellspacing="0" cellpadding="0" border="0">
+                                    <tr>
+                                        <td style="padding:0;">
+                                            <div style="background:#ffffff; border:2px solid #0ea5e9; border-radius:6px; padding:16px;">
+                                                <p style="margin:0; font-size:18px; font-family:monospace; color:#0c4a6e; letter-spacing:2px; word-break:break-all; font-weight:600; text-align:center; user-select:all; -webkit-user-select:all; -moz-user-select:all; -ms-user-select:all;">
+                                                    %s
+                                                </p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    
+                                </table>
+                                
+                                <p style="margin:16px 0 0; font-size:12px; color:#0369a1; text-align:center; line-height:1.6;">
+                                    <strong>Cara Copy:</strong><br>
+                                    1. Klik/tap kode di atas untuk select<br>
+                                    2. Tekan <strong>Ctrl+C</strong> (Windows) atau <strong>Cmd+C</strong> (Mac)<br>
+                                    3. Paste di form aktivasi tema Anda
+                                </p>
+                            </div>
+                        </td>
+                    </tr>
+                    
+                    <!-- INFO -->
+                    <tr>
+                        <td style="padding:0 0 40px;">
+                            <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" border="0">
+                                <tr>
+                                    <td width="40%%" style="padding:12px 0; border-bottom:1px solid #eeeeee; color:#666666; font-size:14px;">Aktivasi</td>
+                                    <td width="60%%" style="padding:12px 0; border-bottom:1px solid #eeeeee; color:#000000; font-size:14px; font-weight:500; text-align:right;">%d website</td>
+                                </tr>
+                                <tr>
+                                    <td width="40%%" style="padding:12px 0; border-bottom:1px solid #eeeeee; color:#666666; font-size:14px;">Berlaku Hingga</td>
+                                    <td width="60%%" style="padding:12px 0; border-bottom:1px solid #eeeeee; color:#000000; font-size:14px; font-weight:500; text-align:right;">%s</td>
+                                </tr>
+                                <tr>
+                                    <td width="40%%" style="padding:12px 0; color:#666666; font-size:14px;">Order ID</td>
+                                    <td width="60%%" style="padding:12px 0; color:#000000; font-size:14px; font-weight:500; text-align:right;">#%d</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- STEPS -->
+                    <tr>
+                        <td style="padding:0 0 40px;">
+                            <p style="margin:0 0 20px; font-size:16px; color:#000000; font-weight:500;">
+                                Cara Aktivasi:
+                            </p>
+                            <ol style="margin:0; padding-left:20px; color:#666666; font-size:15px; line-height:2;">
+                                <li>Login ke WordPress admin website Anda</li>
+                                <li>Buka <strong>Menu Mediman → Tab Lisensi</strong></li>
+                                <li>Copy kode lisensi di atas (klik kode, lalu Ctrl+C / Cmd+C)</li>
+                                <li>Paste di form aktivasi</li>
+                                <li>Klik <strong>"Aktivasi"</strong></li>
+                            </ol>
+                        </td>
+                    </tr>
+                    
+                    <!-- SUPPORT INFO -->
+                    <tr>
+                        <td style="padding:30px 0 0; border-top:1px solid #eeeeee;">
+                            <table width="100%%" cellspacing="0" cellpadding="0" border="0">
+                                <tr>
+                                    <td style="text-align:center; padding:0 0 10px;">
+                                        <p style="margin:0; font-size:14px; color:#666666;">
+                                            Butuh bantuan?
+                                        </p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="text-align:center;">
+                                        <p style="margin:0;">
+                                            <a href="mailto:support@aratheme.id" style="color:#0ea5e9; text-decoration:none; font-weight:500;">
+                                                support@aratheme.id
+                                            </a>
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- FOOTER -->
+                    <tr>
+                        <td style="padding:40px 0 0; border-top:1px solid #eeeeee; text-align:center;">
+                            <p style="margin:0; font-size:12px; color:#999999;">
+                                %s • %d
+                            </p>
+                        </td>
+                    </tr>
+                    
+                </table>
+                
+            </td>
+        </tr>
+    </table>
+    
+</body>
+</html>
     ',
+        !empty($logo_url) ? sprintf('<img src="%s" alt="%s" style="max-width:250px; height:auto; margin:0 0 20px;">', esc_url($logo_url), esc_attr($site_name)) : '',
+        esc_html($site_name),
         esc_html($product_name),
         esc_html($license_key),
-        esc_html($product_name),
         $activation_limit,
-        date_i18n(get_option('date_format'), strtotime($expiry_date)),
+        date_i18n('d F Y', strtotime($expiry_date)),
         $order_id,
-        get_bloginfo('name')
+        esc_html($site_name),
+        date('Y')
     );
     
-    // Email headers
     $headers = [
         'Content-Type: text/html; charset=UTF-8',
-        'From: ' . get_bloginfo('name') . ' <' . get_option('admin_email') . '>'
+        'From: ' . $site_name . ' <' . get_option('admin_email') . '>'
     ];
     
-    // Send email
     $sent = wp_mail($to, $subject, $body, $headers);
     
     if ($sent) {
-        alm_insert_log(
-            $license_key,
-            'email_sent',
-            sprintf('License email sent to %s', $to),
-            ''
-        );
+        alm_insert_log($license_key, 'email_sent', sprintf('License email sent to %s', $to), '');
     } else {
         alm_error_log('Failed to send license email to: ' . $to);
     }
     
     return $sent;
 }
+
+
+
+
 
 /**
  * =====================================================
@@ -271,14 +430,12 @@ function alm_add_license_product_fields() {
     
     echo '<div class="options_group">';
     
-    // Checkbox: Is this a license product?
     woocommerce_wp_checkbox([
         'id'          => '_is_license_product',
         'label'       => __('License Product', 'alm'),
         'description' => __('Centang jika produk ini adalah lisensi tema/plugin', 'alm')
     ]);
     
-    // Activation Limit
     woocommerce_wp_text_input([
         'id'                => '_activation_limit',
         'label'             => __('Activation Limit', 'alm'),
@@ -303,7 +460,6 @@ function alm_add_license_product_fields() {
 add_action('woocommerce_process_product_meta', 'alm_save_license_product_fields');
 
 function alm_save_license_product_fields($post_id) {
-    // Validate & sanitize activation limit
     if (isset($_POST['_activation_limit'])) {
         $activation_limit = absint($_POST['_activation_limit']);
         if ($activation_limit < 1) {
@@ -312,7 +468,6 @@ function alm_save_license_product_fields($post_id) {
         update_post_meta($post_id, '_activation_limit', $activation_limit);
     }
     
-    // Save checkbox
     $is_license = isset($_POST['_is_license_product']) ? 'yes' : 'no';
     update_post_meta($post_id, '_is_license_product', $is_license);
 }
