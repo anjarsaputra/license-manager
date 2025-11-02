@@ -331,22 +331,27 @@ function alm_notify_client_deactivation($site_url, $license_key, $product_name =
     
     // Prepare secure payload
     $payload = array(
-        'action' => 'license_deactivated',
-        'license_key' => $license_key,
-        'product_name' => $product_name,
-        'deactivated_at' => current_time('mysql'),
-        'server_time' => time(),
-        'message' => 'Lisensi Anda telah dinonaktifkan dari server lisensi',
-        'server_url' => home_url()
-    );
+    'action' => 'license_deactivated',
+    'license_key' => $license_key,
+    'site_url' => $site_url, // <--- TAMBAHKAN INI!
+    'product_name' => $product_name,
+    'deactivated_at' => current_time('mysql'),
+    'server_time' => time(),
+    'message' => 'Lisensi Anda telah dinonaktifkan dari server lisensi',
+    'server_url' => home_url()
+);
+
     
     // Add signature for verification (optional but recommended)
    // Ambil secret dari klien
-$secret = 'mediman_webhook_2760ee05bbac6c3a069d540ab3ed50c4';
+$secret = get_option('mediman_webhook_secret', '');
+
     error_log('SERVER SECRET: ' . $secret);
 
 
-$payload['signature'] = hash_hmac('sha256', json_encode($payload), $secret);
+$payload['signature'] = hash_hmac('sha256', json_encode($payload, JSON_UNESCAPED_SLASHES), $secret);
+
+
 
     
 

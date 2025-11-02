@@ -194,7 +194,8 @@ function alm_rest_deactivate_site($request) {
     
     // === Kirim webhook ke klien ===
 $webhook_url = rtrim($site_url, '/').'/wp-json/alm/v1/license-deactivated';
-$webhook_secret = 'mediman_webhook_2760ee05bbac6c3a069d540ab3ed50c4';
+$webhook_secret = get_option('mediman_webhook_secret', '');
+
 
 // Payload WAJIB urut dan sama dengan ekspektasi klien!
 $payload = [
@@ -209,9 +210,12 @@ $payload = [
 ];
 
 // Signature HMAC
-error_log('SERVER SECRET: ' . $webhook_secret);
-$signature = hash_hmac('sha256', json_encode($payload), $webhook_secret);
+error_log('SERVER JSON ENCODE: ' . json_encode($payload, JSON_UNESCAPED_SLASHES));
+
+$signature = hash_hmac('sha256', json_encode($payload, JSON_UNESCAPED_SLASHES), $webhook_secret);
 $payload['signature'] = $signature;
+
+
 
 // Kirim POST pakai wp_remote_post agar tetap di WordPress:
 $response = wp_remote_post($webhook_url, [

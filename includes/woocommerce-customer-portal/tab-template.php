@@ -550,6 +550,48 @@ unset($license);
 </style>
 
 <script>
+   window.showCopySuccess = function($btn) {
+    var originalHtml = $btn.html();
+    $btn.html('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>Copied!</span>');
+    $btn.addClass('copied');
+    setTimeout(function() {
+        $btn.html(originalHtml);
+        $btn.removeClass('copied');
+    }, 2000);
+};
+jQuery(function($) {
+    $('.alm-copy-btn').on('click', function() {
+        // Ambil dengan data-target, pastikan hasilnya benar!
+        var $input = $($(this).data('target'));
+        if (!$input.length) {
+            alert('Target input tidak ditemukan! (data-target: ' + $(this).data('target') + ')');
+            return;
+        }
+        var val = $input.val();
+        if (!val) {
+            alert('License key kosong!');
+            return;
+        }
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(val).then(() => window.showCopySuccess($(this)));
+        } else {
+            $input[0].focus(); $input[0].select();
+            try {
+                if (document.execCommand('copy')) window.showCopySuccess($(this));
+                else alert('Gagal copy. Copy manual dari input.');
+            } catch(e){ alert('Copy failed.'); }
+        }
+    });
+});
+
+
+
+</script>
+
+<script>
+
+
+
 jQuery(document).ready(function($) {
     
     $('.alm-transfer-btn').on('click', function() {
@@ -590,25 +632,11 @@ jQuery(document).ready(function($) {
         });
     });
     
-    // Copy license key
-    $('.alm-copy-btn').on('click', function() {
-        var target = $(this).data('target');
-        var $input = $(target);
-        
-        $input.select();
-        document.execCommand('copy');
-        
-        var $btn = $(this);
-        var originalHtml = $btn.html();
-        
-        $btn.html('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>Copied!</span>');
-        $btn.addClass('copied');
-        
-        setTimeout(function() {
-            $btn.html(originalHtml);
-            $btn.removeClass('copied');
-        }, 2000);
-    });
+ 
+    
+ 
+
+
     
     // Deactivate site - COMPLETELY FIXED
     $('.alm-deactivate-btn').on('click', function() {

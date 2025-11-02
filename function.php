@@ -504,3 +504,32 @@ function alm_send_test_license_email() {
     }
 }
 
+// Shortcode utama: Tampilkan login/register jika belum login, dashboard jika sudah login
+
+// Shortcode untuk login custom member-area
+add_shortcode('wcp_login_form', function() {
+    ob_start();
+    include WCP_TEMPLATES_DIR . 'form-login.php';
+    return ob_get_clean();
+});
+
+// Shortcode untuk register custom member-area
+add_shortcode('wcp_register_form', function() {
+    ob_start();
+    include WCP_TEMPLATES_DIR . 'form-register.php';
+    return ob_get_clean();
+});
+
+// Shortcode utama: Tampilkan login/register jika belum login, dashboard jika sudah login
+add_shortcode('wcp_member_area', function() {
+    ob_start();
+    if (!is_user_logged_in()) {
+        echo do_shortcode('[wcp_login_form]');
+        echo do_shortcode('[wcp_register_form]');
+    } else {
+        include WCP_TEMPLATES_DIR . 'dashboard.php';
+    }
+    return ob_get_clean();
+});
+
+

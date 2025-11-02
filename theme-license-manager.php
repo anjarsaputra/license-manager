@@ -11,6 +11,7 @@ if (!defined('ABSPATH')) {
 }
 
 
+require_once __DIR__ . '/api/webhook-secret-api.php';
 
 // Safe require file
 $function_file = plugin_dir_path(__FILE__) . 'function.php';
@@ -19,6 +20,8 @@ require_once(ABSPATH . 'wp-includes/pluggable.php');
 require_once plugin_dir_path(__FILE__) . 'cleanup.php';
 require_once plugin_dir_path(__FILE__) . 'includes/logger.php';
 require_once plugin_dir_path(__FILE__) . 'includes/license-generator.php';
+
+
 
 // Load email notification handler
 if (file_exists(plugin_dir_path(__FILE__) . 'includes/email-handler.php')) {
@@ -30,6 +33,11 @@ require_once plugin_dir_path(__FILE__) . 'includes/transfer-control-migration.ph
 require_once plugin_dir_path(__FILE__) . 'includes/transfer-control.php';
 require_once plugin_dir_path(__FILE__) . 'includes/transfer-control-api.php';
 require_once plugin_dir_path(__FILE__) . 'includes/transfer-control-admin-ui.php';
+
+
+
+
+
 
 
 
@@ -852,43 +860,79 @@ if (isset($_POST['update_license']) &&
     // Remote Deactivate
  
 
-    if (
+  if (
     isset($_GET['action']) && $_GET['action'] === 'remote_deactivate' &&
     isset($_GET['activation_id']) &&
     isset($_GET['_wpnonce']) &&
     wp_verify_nonce($_GET['_wpnonce'], 'alm_remote_deactivate_' . $_GET['activation_id'])
 ) {
+    global $wpdb;
+    $activationtable = $wpdb->prefix . 'alm_license_activations';
+$licensetable = $wpdb->prefix . 'alm_licenses';
+
+
     $activation_id = intval($_GET['activation_id']);
+
     // Ambil detail SEBELUM delete!
     $activation_detail = $wpdb->get_row($wpdb->prepare(
-        "SELECT a.siteurl, l.licensekey, l.productname FROM $activationtable a JOIN $licensetable l ON a.licenseid = l.id WHERE a.id = %d",
+        "SELECT a.site_url, l.license_key, l.product_name, a.license_id 
+         FROM $activationtable a 
+         JOIN $licensetable l ON a.license_id = l.id 
+         WHERE a.id = %d",
         $activation_id
     ));
-    if ($activation_detail) {
-        $wpdb->delete($activationtable, ['id' => $activation_id]);
-        $wpdb->query($wpdb->prepare(
-            "UPDATE $licensetable SET activations = GREATEST(0, activations - 1) WHERE id = (
-                SELECT licenseid FROM $activationtable WHERE id = %d
-            )", $activation_id
+    
+    // Hapus row activation!
+$wpdb->delete($activationtable, ['id' => $activation_id]);
+
+
+    if ($activation_detail && $activation_detail->license_id) {
+       $license_id = $activation_detail->license_id;
+       
+        $sites = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $activationtable WHERE license_id = %d",
+            $license_id
         ));
-        // KIRIM webhook ke klien
-        $webhook_url = rtrim($activation_detail->siteurl, '/') . '/wp-json/alm/v1/license-deactivated';
-        $webhook_secret = 'mediman_webhook_2760ee05bbac6c3a069d540ab3ed50c4';
+
+        // Update count activations (kalau perlu)
+        $wpdb->query($wpdb->prepare(
+            "UPDATE $licensetable SET activations = GREATEST(0, activations - 1) WHERE id = %d",
+            $license_id
+        ));
+
+        // Ambil secret dari opsi, fallback jika belum ada
+        $webhook_secret = get_option('mediman_webhook_secret', '');
+        if (empty($webhook_secret)) {
+            $webhook_secret = 'mediman_webhook_2760ee05bbac6c3a069d540ab3ed50c4';
+        }
+
+         $webhook_url = rtrim($activation_detail->site_url, '/') . '/wp-json/alm/v1/license-deactivated';
+
         $payload = [
-            'action'        => 'license_deactivated',
-            'license_key'   => $activation_detail->licensekey,
-            'site_url'      => $activation_detail->siteurl,
-            'deactivated_at'=> gmdate('Y-m-d H:i:s'),
-            'product_name'  => $activation_detail->productname ?? 'Mediman',
-            'server_url'    => home_url(),
-            'server_time'   => time(),
-            'message'       => 'Dinonaktifkan dari admin'
-        ];
-        alm_send_webhook_license_deactivated($webhook_url, $payload, $webhook_secret);
+        'action'        => 'license_deactivated',
+        'license_key'   => $activation_detail->license_key,
+        'site_url'      => $activation_detail->site_url,
+        'deactivated_at'=> gmdate('Y-m-d H:i:s'),
+        'product_name'  => $activation_detail->product_name ?? 'Mediman',
+        'server_url'    => home_url(),
+        'server_time'   => time(),
+        'message'       => 'Dinonaktifkan dari admin',
+        'secret'        => $webhook_secret,
+    ];
+    alm_send_webhook_license_deactivated($webhook_url, $payload, $webhook_secret);
+    } else {
+        error_log("ALM ERROR: Activation detail/License ID not found for activation_id=$activation_id");
     }
-    wp_safe_redirect(admin_url('admin.php?page=alm-edit-license&id=' . $activation->license_id . '&deactivate_success=true'));
+
+    // Redirect pakai $license_id, fallback ke halaman utama jika gagal ambil id
+    if (!empty($license_id)) {
+        wp_safe_redirect(admin_url('admin.php?page=alm-edit-license&id=' . $license_id . '&deactivate_success=true'));
+    } else {
+        wp_safe_redirect(admin_url('admin.php?page=alm-licenses&deactivate_success=notfound'));
+    }
     exit;
 }
+
 
    
     
@@ -1787,12 +1831,13 @@ function alm_render_edit_license_page() {
 
     // Query untuk aktivasi, slot, dsb. (kode kamu sudah benar)
     $activations = $wpdb->get_results($wpdb->prepare(
-        "SELECT id, license_id, site_url, activated_at 
-         FROM $activation_table 
-         WHERE license_id = %d 
-         ORDER BY activated_at DESC",
-        $license_id
-    ));
+    "SELECT id, license_id, site_url, activated_at 
+     FROM $activation_table 
+     WHERE license_id = %d 
+     ORDER BY activated_at DESC",
+    $license_id
+));
+
 
     $current = $wpdb->get_var(
         $wpdb->prepare(

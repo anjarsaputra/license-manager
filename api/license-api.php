@@ -38,7 +38,10 @@ function alm_insert_log($license_key, $action, $message, $site_url = '') {
 function alm_send_webhook_license_deactivated($webhook_url, $payload, $webhook_secret) {
     if (isset($payload['signature'])) unset($payload['signature']);
     error_log('SERVER SECRET: ' . $webhook_secret);
-    $signature = hash_hmac('sha256', json_encode($payload), $webhook_secret);
+   error_log('SERVER JSON ENCODE: ' . json_encode($payload, JSON_UNESCAPED_SLASHES));
+
+
+    $signature = hash_hmac('sha256', json_encode($payload, JSON_UNESCAPED_SLASHES), $webhook_secret);
     $payload['signature'] = $signature;
 
     $ch = curl_init($webhook_url);
@@ -327,7 +330,8 @@ function alm_api_deactivate_license(WP_REST_Request $request) {
 
         // === Kirim webhook ke klien
         $webhook_url = rtrim($site_url, '/').'/wp-json/alm/v1/license-deactivated';
-        $webhook_secret = 'mediman_webhook_2760ee05bbac6c3a069d540ab3ed50c4'; // Pastikan ini sesuai klien (lihat mediman_webhook_secret)
+        $webhook_secret = get_option('mediman_webhook_secret', '');
+
         $payload = [
             'action'        => 'license_deactivated',
             'license_key'   => $license_key,

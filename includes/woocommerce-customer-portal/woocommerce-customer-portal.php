@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce Customer Portal
  * Description: Custom My Account portal with ALM license management integration
  * Version: 2.0.0
- * Author: Anjar Saputra
+ * Author: ARAdev
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * WC requires at least: 8.0
@@ -215,3 +215,68 @@ add_action('woocommerce_before_edit_address_form_shipping', function() {
     </style>
     <?php
 });
+
+
+
+//custom member area login
+add_action('wcp_custom_login_render', function() {
+    if (!is_user_logged_in()) {
+        include WCP_TEMPLATES_DIR . 'form-login.php';
+    } else {
+        echo '<div class="wcp-login-msg">Anda sudah login ke member-area.</div>';
+    }
+});
+do_action('wcp_custom_login_render');
+
+add_action('init', function() {
+    if (
+        $_SERVER['REQUEST_METHOD'] === 'POST'
+        && isset($_POST['wcp_custom_login_nonce'])
+        && wp_verify_nonce($_POST['wcp_custom_login_nonce'], 'wcp_custom_login')
+    ) {
+        $credentials = [
+            'user_login'    => sanitize_text_field($_POST['wcp_username']),
+            'user_password' => $_POST['wcp_password'],
+            'remember'      => true,
+        ];
+        $user = wp_signon($credentials, false);
+
+        if (is_wp_error($user)) {
+            // Tampilkan error login
+            add_filter('wcp_custom_login_error', function() use ($user) {
+                return '<div class="wcp-login-error" style="color: #e53e3e; margin:10px 0;">' . esc_html($user->get_error_message()) . '</div>';
+            });
+        } else {
+            wp_redirect(home_url('/member-area/'));
+            exit;
+        }
+    }
+});
+
+
+// Shortcode untuk login custom member-area
+add_shortcode('wcp_login_form', function() {
+    ob_start();
+    include WCP_TEMPLATES_DIR . 'form-login.php';
+    return ob_get_clean();
+});
+
+// Shortcode untuk register custom member-area
+add_shortcode('wcp_register_form', function() {
+    ob_start();
+    include WCP_TEMPLATES_DIR . 'form-register.php';
+    return ob_get_clean();
+});
+
+// Shortcode utama: Tampilkan login/register jika belum login, dashboard jika sudah login
+add_shortcode('wcp_member_area', function() {
+    ob_start();
+    if (!is_user_logged_in()) {
+        echo do_shortcode('[wcp_login_form]');
+        echo do_shortcode('[wcp_register_form]');
+    } else {
+        include WCP_TEMPLATES_DIR . 'dashboard.php';
+    }
+    return ob_get_clean();
+});
+

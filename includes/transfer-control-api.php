@@ -1,6 +1,10 @@
 <?php
 if (!defined('ABSPATH')) exit;
 
+
+
+
+
 add_action('rest_api_init', function() {
     register_rest_route('alm/v1', '/deactivate-controlled', [
         'methods' => 'POST',
@@ -20,8 +24,33 @@ add_action('rest_api_init', function() {
 
 function alm_api_deactivate_with_transfer_control(WP_REST_Request $request) {
     global $wpdb;
+
     $license_key = sanitize_text_field($request->get_param('license_key'));
     $domain = sanitize_text_field($request->get_param('domain'));
+
+    // --- Signature Validasi ---
+    $webhook_secret = get_option('mediman_webhook_secret', '');
+    $received_signature = $request->get_header('x-alm-signature') ?: $request->get_param('signature');
+    $payload_for_signature = [
+        'license_key' => $license_key,
+        'domain' => $domain,
+    ];
+    $expected_signature = hash_hmac('sha256', json_encode($payload_for_signature, JSON_UNESCAPED_SLASHES), $webhook_secret);
+
+    if (!$received_signature || !hash_equals($expected_signature, $received_signature)) {
+        return new WP_REST_Response([
+            'success' => false,
+            'message' => 'Forbidden: Invalid signature'
+        ], 403);
+    }
+
+    if (empty($license_key) || empty($domain)) {
+        return new WP_REST_Response([
+            'success' => false, 'message' => 'Missing required parameters'
+        ], 400);
+    }
+    
+
 
     if (empty($license_key) || empty($domain)) {
         return new WP_REST_Response([
