@@ -1,11 +1,30 @@
 <?php
+// Proses login manual (jangan lupa tempatkan di file PHP yang pasti dieksekusi)
+if ( isset($_POST['wcp_custom_login_nonce']) && wp_verify_nonce($_POST['wcp_custom_login_nonce'],'wcp_custom_login') ) {
+    $creds = array(
+        'user_login'    => sanitize_text_field($_POST['wcp_username']),
+        'user_password' => $_POST['wcp_password'],
+        'remember'      => true
+    );
+    $user = wp_signon( $creds, false );
+    if ( ! is_wp_error( $user ) ) {
+        // Redirect ke member-area setelah login sukses
+        wp_redirect( site_url('/member-area/') ); // Ganti dengan slug dashboard/tujuan Anda
+        exit();
+    } else {
+        // Error: tampilkan pesan
+        echo '<div style="color:red;text-align:center;margin-bottom:20px;">Login gagal: ' . esc_html($user->get_error_message()) . '</div>';
+    }
+}
+
+// Kalau user sudah login, tampilkan info, bukan form lagi
 if ( is_user_logged_in() ) {
     echo '<div class="wcp-login-success">Anda sudah login ke member-area.</div>';
     return;
 }
 ?>
 
-<form method="post" class="wcp-login-form" action="">
+<form method="post" class="wcp-login-form">
     <h2 style="text-align:center;margin-bottom:28px;">Login Member Area</h2>
 
     <p>
@@ -18,7 +37,8 @@ if ( is_user_logged_in() ) {
         <input type="password" name="wcp_password" id="wcp_password" required style="width:100%;padding:10px;">
     </p>
 
-    <?php wp_nonce_field('wcp_custom_login','wcp_custom_login_nonce'); ?>
+    <?php wp_nonce_field('wcp_custom_login', 'wcp_custom_login_nonce'); ?>
+
     <p style="text-align:center;">
         <button type="submit" style="padding:12px 36px;background:#2563eb;color:#fff;border-radius:5px;border:none;cursor:pointer;">Masuk</button>
     </p>
@@ -26,6 +46,7 @@ if ( is_user_logged_in() ) {
         <a href="<?php echo wp_lostpassword_url(); ?>">Lupa password?</a>
     </p>
 </form>
+
 <style>
 .wcp-login-form {
     max-width:350px;

@@ -511,3 +511,82 @@ function alm_save_variation_license_fields($variation_id, $i) {
         update_post_meta($variation_id, '_activation_limit', $activation_limit);
     }
 }
+
+
+function alm_generate_random_slug($length = 8) {
+    $chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    $slug = '';
+    for ($i = 0; $i < $length; $i++) {
+        $slug .= $chars[rand(0, strlen($chars)-1)];
+    }
+    return $slug;
+}
+
+
+add_action('woocommerce_save_product_variation', function($variation_id, $i) {
+    if (!get_post_meta($variation_id, '_custom_checkout_slug', true)) {
+        // Cek unik: pastikan slug belum dipakai variant lain
+        do {
+            $slug = alm_generate_random_slug(7);
+            $exists = get_posts([
+                'post_type' => 'product_variation',
+                'meta_key'  => '_custom_checkout_slug',
+                'meta_value'=> $slug,
+                'fields'    => 'ids',
+                'posts_per_page' => 1,
+            ]);
+        } while (!empty($exists));
+        update_post_meta($variation_id, '_custom_checkout_slug', $slug);
+    }
+}, 10, 2);
+
+
+add_action('woocommerce_product_after_variable_attributes', function($loop, $variation_data, $variation) {
+    $variant_id = $variation->ID;
+    $slug = get_post_meta($variant_id, '_custom_checkout_slug', true);
+    if (!$slug) {
+        $slug = alm_generate_random_slug(7);
+        update_post_meta($variant_id, '_custom_checkout_slug', $slug);
+    }
+    $checkout_url = home_url('/checkout/' . $slug . '/');
+    echo '<p style="margin:4px 0 10px;">
+        <strong>Checkout Link</strong>:<br>
+        <input type="text" readonly onclick="this.select()" value="'.esc_url($checkout_url).'" style="width:100%;font-size:12px;">
+        </p>';
+}, 10, 3);
+
+add_action('init', function() {
+    add_rewrite_rule('^checkout/([^/]+)/?$', 'index.php?custom_checkout_slug=$matches[1]', 'top');
+});
+
+add_filter('query_vars', function($vars) {
+    $vars[] = 'custom_checkout_slug';
+    return $vars;
+});
+
+
+add_action('template_redirect', function() {
+    error_log('Template_redirect handler checked'); 
+    $slug = get_query_var('custom_checkout_slug');
+     error_log('Slug queried: '.$slug);   
+    if ($slug) {
+        $args = [
+            'post_type' => 'product_variation',
+            'meta_key' => '_custom_checkout_slug',
+            'meta_value' => $slug,
+            'fields' => 'ids',
+            'posts_per_page' => 1
+        ];
+        $posts = get_posts($args);
+        if (!empty($posts)) {
+            $variant_id = $posts[0];
+            WC()->cart->empty_cart();
+            WC()->cart->add_to_cart($variant_id);
+            wp_redirect(wc_get_checkout_url());
+            exit;
+        } else {
+            wp_redirect(home_url('/shop/')); // Fallback jika slug tak ditemukan
+            exit;
+        }
+    }
+});

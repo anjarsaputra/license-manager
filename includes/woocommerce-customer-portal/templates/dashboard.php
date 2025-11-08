@@ -16,21 +16,14 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Proteksi variabel agar selalu array (anti error null)
-$orders    = is_array($orders)    ? $orders    : [];
-$licenses  = is_array($licenses)  ? $licenses  : [];
-$downloads = is_array($downloads) ? $downloads : [];
-$stats     = is_array($stats)     ? $stats     : ['expired'=>0, 'active'=>0, 'total'=>0];
-
-$greeting = class_exists('WCP_Portal_Helpers') ? WCP_Portal_Helpers::get_greeting() : 'Hai';
-$recent_orders    = array_slice($orders,    0, 3);
-$recent_licenses  = array_slice($licenses,  0, 3);
+$greeting = WCP_Portal_Helpers::get_greeting();
+$recent_orders = array_slice($orders, 0, 3);
+$recent_licenses = array_slice($licenses, 0, 3);
 $recent_downloads = array_slice($downloads, 0, 3);
 ?>
 
-
 <div class="portal-account-dashboard">
-
+    
     <!-- Welcome Card -->
     <div class="dashboard-user-card">
         <div class="user-avatar">
@@ -49,13 +42,13 @@ $recent_downloads = array_slice($downloads, 0, 3);
                 <?php echo esc_html($greeting); ?>, <?php echo esc_html($current_user->display_name); ?>!
             </h2>
             <p class="dashboard-login">
-                <?php
+                <?php 
                 printf(
-                    __('Terakhir login: %s', 'wc-customer-portal'),
+                    __('Terakhir login: %s', 'wc-customer-portal'), 
                     date_i18n('d F Y, H:i', current_time('timestamp'))
-                );
+                ); 
                 ?>
-                <span class="user-role">• <?php echo !empty($current_user->roles) ? ucfirst($current_user->roles[0]) : ''; ?></span>
+                <span class="user-role">• <?php echo ucfirst($current_user->roles[0]); ?></span>
             </p>
         </div>
         <div class="user-actions">
@@ -78,11 +71,11 @@ $recent_downloads = array_slice($downloads, 0, 3);
         </svg>
         <div class="alert-content">
             <strong><?php _e('Tindakan Diperlukan', 'wc-customer-portal'); ?></strong>
-            <?php
+            <?php 
             printf(
-                __('Anda memiliki %d lisensi kedaluwarsa.', 'wc-customer-portal'),
+                __('Anda memiliki %d lisensi kedaluwarsa.', 'wc-customer-portal'), 
                 $stats['expired']
-            );
+            ); 
             ?>
             <a href="<?php echo esc_url(wc_get_account_endpoint_url('my-licenses')); ?>">
                 <?php _e('Perpanjang Sekarang', 'wc-customer-portal'); ?>
@@ -93,10 +86,14 @@ $recent_downloads = array_slice($downloads, 0, 3);
 
     <!-- Stats Grid -->
     <div class="dashboard-stats-grid">
-        <!-- Orders -->
+        
         <div class="stat-card stat-orders">
             <div class="stat-icon">
-                <!-- SVG... -->
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                    <line x1="12" y1="22.08" x2="12" y2="12"/>
+                </svg>
             </div>
             <div class="stat-content">
                 <div class="stat-value"><?php echo count($orders); ?></div>
@@ -104,10 +101,13 @@ $recent_downloads = array_slice($downloads, 0, 3);
                 <div class="stat-trend"><?php _e('Semua Waktu', 'wc-customer-portal'); ?></div>
             </div>
         </div>
-        <!-- Licenses -->
+        
         <div class="stat-card stat-licenses">
             <div class="stat-icon">
-                <!-- SVG... -->
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0110 0v4"/>
+                </svg>
             </div>
             <div class="stat-content">
                 <div class="stat-value"><?php echo $stats['active']; ?></div>
@@ -115,10 +115,14 @@ $recent_downloads = array_slice($downloads, 0, 3);
                 <div class="stat-trend"><?php echo $stats['total']; ?> <?php _e('total', 'wc-customer-portal'); ?></div>
             </div>
         </div>
-        <!-- Downloads -->
+        
         <div class="stat-card stat-products">
             <div class="stat-icon">
-                <!-- SVG... -->
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
             </div>
             <div class="stat-content">
                 <div class="stat-value"><?php echo count($downloads); ?></div>
@@ -126,10 +130,13 @@ $recent_downloads = array_slice($downloads, 0, 3);
                 <div class="stat-trend"><?php _e('Tersedia Sekarang', 'wc-customer-portal'); ?></div>
             </div>
         </div>
-        <!-- Spent -->
+        
         <div class="stat-card stat-spent">
             <div class="stat-icon">
-                <!-- SVG... -->
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="1" x2="12" y2="23"/>
+                    <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
+                </svg>
             </div>
             <div class="stat-content">
                 <div class="stat-value"><?php echo wc_price($total_spent); ?></div>
@@ -137,6 +144,7 @@ $recent_downloads = array_slice($downloads, 0, 3);
                 <div class="stat-trend"><?php _e('Selamanya', 'wc-customer-portal'); ?></div>
             </div>
         </div>
+        
     </div>
 
     <!-- Quick Actions -->
@@ -155,7 +163,7 @@ $recent_downloads = array_slice($downloads, 0, 3);
                 <?php endif; ?>
             </a>
             
-            <a href="<?php echo esc_url(wc_get_account_endpoint_url('lihat-pesanan')); ?>" class="action-btn btn-green">
+            <a href="<?php echo esc_url(wc_get_account_endpoint_url('orders')); ?>" class="action-btn btn-green">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
                 </svg>
@@ -165,7 +173,7 @@ $recent_downloads = array_slice($downloads, 0, 3);
                 <?php endif; ?>
             </a>
             
-            <a href="<?php echo esc_url(wc_get_account_endpoint_url('unduh')); ?>" class="action-btn btn-orange">
+            <a href="<?php echo esc_url(wc_get_account_endpoint_url('downloads')); ?>" class="action-btn btn-orange">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
                     <polyline points="7 10 12 15 17 10"/>
@@ -307,9 +315,8 @@ $recent_downloads = array_slice($downloads, 0, 3);
                 
                 <?php if ($recent_orders) : ?>
                 <ul class="orders-list">
-                    <?php if ($recent_orders && is_array($recent_orders)) : ?>
-                        <?php foreach ($recent_orders as $order) : ?>
-                        <li class="order-item">
+                    <?php foreach ($recent_orders as $order) : ?>
+                    <li class="order-item">
                         <div class="order-header">
                             <a href="<?php echo esc_url($order->get_view_order_url()); ?>" class="order-number">
                                 #<?php echo $order->get_order_number(); ?>
@@ -330,8 +337,7 @@ $recent_downloads = array_slice($downloads, 0, 3);
                             <?php echo $order->get_item_count(); ?> <?php _e('item(s)', 'wc-customer-portal'); ?>
                         </div>
                     </li>
-                   <?php endforeach; ?>
-                    <?php endif; ?>
+                    <?php endforeach; ?>
                 </ul>
                 <?php else : ?>
                 <div class="empty-state-small">
@@ -361,7 +367,7 @@ $recent_downloads = array_slice($downloads, 0, 3);
                         <span class="summary-label"><?php _e('Total Belanja', 'wc-customer-portal'); ?></span>
                         <span class="summary-value"><?php echo wc_price($total_spent); ?></span>
                     </div>
-                    <a href="<?php echo esc_url(wc_get_account_endpoint_url('edit-akun')); ?>" class="btn-edit-account">
+                    <a href="<?php echo esc_url(wc_get_account_endpoint_url('edit-account')); ?>" class="btn-edit-account">
                         <?php _e('Edit Akun', 'wc-customer-portal'); ?>
                     </a>
                 </div>
@@ -371,49 +377,35 @@ $recent_downloads = array_slice($downloads, 0, 3);
         
     </div>
     
-    
-            <style>
-        /* HILANGKAN GARIS BAWAH SEMUA BUTTON/LINK */
-        a, .action-btn, .btn-view-all-licenses, .btn-download, .btn-edit-account, .view-all-link, .btn-primary-small {
-            text-decoration: none !important;
-        }
-        
-        
-        /* Hilangkan garis bawah pada semua link & button */
-        a, .action-btn, .btn-view-all-licenses, .btn-download, .btn-edit-account, .view-all-link, .btn-primary-small {
-            text-decoration: none !important;
-        }
-        
-        /* Hover: tampilkan background abu terang, warna text tetap hitam, tanpa garis bawah */
-        a:hover,
-        .action-btn:hover,
-        .btn-view-all-licenses:hover,
-        .btn-download:hover,
-        .btn-edit-account:hover,
-        .view-all-link:hover,
-        .btn-primary-small:hover {
-            text-decoration: none !important;
-            background: #f3f4f6 !important; /* abu terang */
-            color: #1f2937 !important;       /* hitam (Tailwind gray-800) */
-            border-color: inherit !important;
-            box-shadow: none !important;
-        }
-        
-        a, .action-btn, .btn-view-all-licenses, .btn-download, .btn-edit-account, .view-all-link, .btn-primary-small {
-                text-decoration: none !important;
-            }
-            a:hover,
-            .action-btn:hover,
-            .btn-view-all-licenses:hover,
-            .btn-download:hover,
-            .btn-edit-account:hover,
-            .view-all-link:hover,
-            .btn-primary-small:hover {
-                text-decoration: none !important;
-                background: #f3f4f6 !important;
-                color: #1f2937 !important;
-                border-color: inherit !important;
-                box-shadow: none !important;
-            }
-        </style>
+    <style>
+/* HILANGKAN GARIS BAWAH SEMUA BUTTON/LINK */
+a, .action-btn, .btn-view-all-licenses, .btn-download, .btn-edit-account, .view-all-link, .btn-primary-small {
+    text-decoration: none !important;
+}
+
+<style>
+/* Hilangkan garis bawah pada semua link & button */
+a, .action-btn, .btn-view-all-licenses, .btn-download, .btn-edit-account, .view-all-link, .btn-primary-small {
+    text-decoration: none !important;
+}
+
+/* Hover: tampilkan background abu terang, warna text tetap hitam, tanpa garis bawah */
+a:hover,
+.action-btn:hover,
+.btn-view-all-licenses:hover,
+.btn-download:hover,
+.btn-edit-account:hover,
+.view-all-link:hover,
+.btn-primary-small:hover {
+    text-decoration: none !important;
+    background: #f3f4f6 !important; /* abu terang */
+    color: #1f2937 !important;       /* hitam (Tailwind gray-800) */
+    border-color: inherit !important;
+    box-shadow: none !important;
+}
+</style>
+
+</style>
+
+
 </div>

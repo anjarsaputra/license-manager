@@ -43,7 +43,7 @@ class WCP_Portal_Init {
         }
         
         if (is_admin() && !current_user_can('edit_posts')) {
-            wp_safe_redirect(wc_get_page_permalink('myaccount'));
+            
             exit;
         }
     }

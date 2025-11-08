@@ -21,6 +21,7 @@ require_once plugin_dir_path(__FILE__) . 'cleanup.php';
 require_once plugin_dir_path(__FILE__) . 'includes/logger.php';
 require_once plugin_dir_path(__FILE__) . 'includes/license-generator.php';
 
+require_once plugin_dir_path(__FILE__) . 'includes/woocommerce-customer-portal/woocommerce-customer-portal.php';
 
 
 // Load email notification handler

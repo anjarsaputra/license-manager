@@ -1,0 +1,122 @@
+.wcp-member-area {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  margin: 60px 0 70px 0;
+}
+
+.wcp-login-card {
+  background: linear-gradient(120deg, #e0e7ff 0%, #f8fafc 100%);
+  border-radius: 24px;
+  box-shadow: 0 8px 32px rgba(59, 130, 246, .09);
+  padding: 40px 42px 30px 42px;
+  max-width: 410px;
+  width: 100%;
+}
+
+.wcp-login-title {
+  text-align: center;
+  font-size: 2.1rem;
+  font-weight: 800;
+  color: #2563eb;
+  margin-bottom: 30px;
+}
+
+.wcp-form-group {
+  margin-bottom: 22px;
+}
+
+.wcp-form-input {
+  width: 100%;
+  background: #fff;
+  border: 1.5px solid #dbeafe;
+  border-radius: 9px;
+  padding: 12px 15px;
+  font-size: 1.08rem;
+  color: #333;
+  box-sizing: border-box;
+  transition: border-color .2s;
+}
+.wcp-form-input:focus {
+  border-color: #2563eb;
+  outline: none;
+  box-shadow: 0 2px 9px rgba(59,130,246,0.08);
+}
+
+.wcp-form-group label {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #384262;
+  margin-bottom: 7px;
+  display: block;
+}
+
+.wcp-btn {
+  width: 100%;
+  border-radius: 10px;
+  font-size: 1.04rem;
+  font-weight: bold;
+  padding: 12px 0;
+  margin-top: 5px;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 8px rgba(59,130,246,0.08);
+  transition: all .18s;
+}
+.wcp-btn-blue {
+  background: linear-gradient(90deg,#2563eb 0%,#3b82f6 90%);
+  color: #fff;
+}
+.wcp-btn-blue:hover {
+  background: linear-gradient(90deg,#1d4ed8 0%,#2563eb 100%);
+}
+.wcp-btn-outline-blue {
+  background: #fff;
+  color: #2563eb;
+  border: 2px solid #2563eb;
+}
+.wcp-btn-outline-blue:hover {
+  background: #e0e7ff;
+  color: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.wcp-row {
+  display: flex;
+}
+.wcp-justify-between { justify-content: space-between; }
+.wcp-align-center { align-items: center;}
+
+.wcp-rememberme {
+  font-size: 0.95rem;
+  color: #64748b;
+}
+
+.wcp-forgot-link {
+  font-size: 0.95rem;
+  color: #2563eb;
+  text-decoration: none;
+}
+.wcp-forgot-link:hover { text-decoration: underline; }
+
+.wcp-register-separator {
+  height: 2px;
+  background: #e6e8f2;
+  margin: 38px 0 27px 0;
+  border-radius: 4px;
+}
+
+.wcp-register-title {
+  text-align: left;
+  font-size: 1.29rem;
+  font-weight: 700;
+  color: #2563eb;
+  margin-bottom: 22px;
+}
+
+/* Responsif */
+@media (max-width: 520px) {
+  .wcp-login-card { padding: 15px 8px 20px 8px; border-radius: 14px; max-width: 99vw;}
+  .wcp-login-title { font-size:1.2rem;}
+  .wcp-register-title{font-size:1rem;}
+}

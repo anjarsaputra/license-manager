@@ -23,8 +23,6 @@ if ( ! current_user_can('manage_options') ) {
     wp_die('Hanya admin yang boleh mengakses halaman ini.');
 }
 
-// ... kode dashboard ...
-// Selanjutnya barulah kode dashboard, function, dsb...
 
 global $wpdb;
 $alerts = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}alm_logs WHERE action = 'alert' ORDER BY log_time DESC LIMIT 3");
